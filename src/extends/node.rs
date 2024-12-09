@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
-use bases::{NodeId, NodeKey, Reporter, State};
-
+use bases::{NodeId, NodeKey, Reporter};
 use crate::*;
 
 mod frand_node {
@@ -16,7 +15,7 @@ pub struct TerminalNode<S: State> {
     _phantom: PhantomData<S>,
 }
 
-impl<S: State> NodeBase for TerminalNode<S> {
+impl<S: State> Node for TerminalNode<S> {
     fn key(&self) -> &NodeKey { &self.key }
     fn reporter(&self) -> &Reporter { &self.reporter }
 

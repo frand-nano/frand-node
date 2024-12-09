@@ -4,7 +4,6 @@ mod message;
 mod packet;
 mod reporter;
 mod emitter;
-mod processor;
 
 pub use self::{
     state::*,
@@ -13,5 +12,4 @@ pub use self::{
     packet::*,
     reporter::*,
     emitter::*,
-    processor::*,
 };

@@ -1,6 +1,6 @@
 use super::{NodeId, NodeKey, Reporter};
 
-pub trait NodeBase: 'static {
+pub trait Node: 'static {
     fn key(&self) -> &NodeKey;
     fn reporter(&self) -> &Reporter;
 

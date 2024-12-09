@@ -2,7 +2,7 @@ use anyhow::Result;
 use super::*;
 
 pub trait State: 'static + Default + Emitable {
-    type Node: NodeBase;
+    type Node: Node;
     type Message: Message;
 
     fn new_node<R: Into<Reporter>>(

@@ -72,7 +72,7 @@ pub fn expand(
             }
         }
 
-        impl #mp::NodeBase for #node_name {
+        impl #mp::Node for #node_name {
             fn key(&self) -> &#mp::NodeKey { &self.key }
             fn reporter(&self) -> &#mp::Reporter { &self.reporter }
         

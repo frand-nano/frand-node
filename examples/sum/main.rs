@@ -1,3 +1,4 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use frand_node::*;
 
@@ -15,23 +16,29 @@ struct SumSub {
     sum: i32,
 }
 
-fn main() -> anyhow::Result<()> {
-    let mut processor = Processor::<Sum>::new(|state, node, message| {
-        use SumMessage::*;
-        use SumSubMessage::*;
+#[test]
+fn sum() -> Result<()> { main() }
 
-        Ok(match message {
-            sum1(a(_) | b(_)) => node.sum1.sum.emit(state.sum1.a + state.sum1.b)?,
-            sum1(sum(s)) => node.sum3.a.emit(s)?,
+fn main() -> Result<()> {
+    let mut processor = Processor::<Sum>::new(
+        || {},
+        |state, node, message| {
+            use SumMessage::*;
+            use SumSubMessage::*;
 
-            sum2(a(_) | b(_)) => node.sum2.sum.emit(state.sum2.a + state.sum2.b)?,
-            sum2(sum(s)) => node.sum3.b.emit(s)?,
+            Ok(match message {
+                sum1(a(_) | b(_)) => node.sum1.sum.emit(state.sum1.a + state.sum1.b)?,
+                sum1(sum(s)) => node.sum3.a.emit(s)?,
 
-            sum3(a(_) | b(_)) => node.sum3.sum.emit(state.sum3.a + state.sum3.b)?,
+                sum2(a(_) | b(_)) => node.sum2.sum.emit(state.sum2.a + state.sum2.b)?,
+                sum2(sum(s)) => node.sum3.b.emit(s)?,
 
-            _ => (),
-        })
-    });
+                sum3(a(_) | b(_)) => node.sum3.sum.emit(state.sum3.a + state.sum3.b)?,
+
+                _ => (),
+            })
+        }
+    );
 
     processor.node().sum1.a.emit(1)?;
     processor.node().sum1.b.emit(2)?;

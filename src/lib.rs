@@ -6,9 +6,11 @@ pub mod extends;
 pub mod prelude {
     pub use frand_node_macro::*;
     
-    pub use crate::bases::{
-        State, NodeBase, Message, Emitter,    
-        Processor,
+    pub use crate::{
+        bases::{
+            State, Node, Message, Emitter,    
+        },
+        extends::Processor,        
     };
 }
 
