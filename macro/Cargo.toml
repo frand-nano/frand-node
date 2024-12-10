@@ -1,8 +1,13 @@
 [package]
-name = "frand-node-macro"
+edition.workspace = true
 version.workspace = true
 authors.workspace = true
-edition.workspace = true
+license.workspace = true
+name = "frand-node-macro"
+readme = "README.md"
+documentation = "https://docs.rs/frand-node-macro"
+repository = "https://https://github.com/frand-nano/frand-node-macro"
+description = "A crate providing derive macros for serde and message handling tools."
 
 [lib]
 proc-macro = true

@@ -4,8 +4,10 @@ use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use timer::*;
+use view::*;
 
 mod timer;
+mod view;
 
 struct App {
     processor: Processor<Timer>,

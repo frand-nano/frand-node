@@ -1,3 +1,9 @@
+// Copyright 2024 frand-nano
+// SPDX-License-Identifier: MIT
+//
+// This software is licensed under the MIT License.
+// For more details, see the LICENSE file in the project root.
+
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::quote;

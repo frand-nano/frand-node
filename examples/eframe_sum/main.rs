@@ -3,18 +3,20 @@ use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use sum::*;
+use view::*;
 
 mod sum;
+mod view;
 
 struct App {
-    processor: Processor::<Sum>,
+    processor: Processor::<Sums>,
 }
 
 impl App {
     fn new() -> Self {
         Self { processor: Processor::new(
             |result| if let Err(err) = result { log::info!("{err}") }, 
-            Sum::update,
+            Sums::update,
         ) }
     }
 }
