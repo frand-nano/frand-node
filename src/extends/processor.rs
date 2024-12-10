@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{collections::HashSet, ops::Deref};
 use bases::{NodeKey, Packet, Reporter};
-use crossbeam::channel::{unbounded, Receiver};
+use crossbeam::channel::{unbounded, Receiver, SendError};
 use crate::*;
 
 pub struct Processor<S: State> {
@@ -26,13 +26,12 @@ impl<S: State> Processor<S> {
     pub fn new<F>(
         callback: F,
         update: fn(&S::StateNode<'_>, S::Message),
-    ) -> Self where F: 'static + Fn() {
+    ) -> Self where F: 'static + Fn(Result<(), SendError<Packet>>) + Send + Sync {
         let (input_tx, input_rx) = unbounded();
         let (process_tx, process_rx) = unbounded();
 
         let callback = move |packet| {
-            input_tx.send(packet).unwrap();
-            callback()
+            callback(input_tx.send(packet))
         };
 
         Self {

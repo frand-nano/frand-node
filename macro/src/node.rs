@@ -51,7 +51,7 @@ pub fn expand(
     ).collect();
 
     Ok(quote!{
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         #vis struct #node_name {
             key: #mp::NodeKey,
             reporter: #mp::Reporter,

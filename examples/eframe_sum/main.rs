@@ -1,5 +1,7 @@
 use eframe::{egui::{CentralPanel, Context}, Frame};
 use frand_node::*;
+use log::LevelFilter;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use sum::*;
 
 mod sum;
@@ -11,23 +13,8 @@ struct App {
 impl App {
     fn new() -> Self {
         Self { processor: Processor::new(
-            || {}, 
-            |node, message| {
-                use SumMessage::*;
-                use SumSubMessage::*;
-
-                match message {
-                    sum1(a(_) | b(_)) => node.sum1.emit_sum(),
-                    sum1(sum(s)) => node.sum3.a.emit(s),
-
-                    sum2(a(_) | b(_)) => node.sum2.emit_sum(),
-                    sum2(sum(s)) => node.sum3.b.emit(s),
-
-                    sum3(a(_) | b(_)) => node.sum3.emit_sum(),
-
-                    _ => (),
-                }
-            },
+            |result| if let Err(err) = result { log::info!("{err}") }, 
+            Sum::update,
         ) }
     }
 }
@@ -45,6 +32,8 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result<()> {
+    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+    
     let options = eframe::NativeOptions::default();
     
     eframe::run_native(

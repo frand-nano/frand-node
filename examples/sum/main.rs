@@ -1,6 +1,8 @@
 use anyhow::Result;
+use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 use frand_node::*;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Node)]
 struct Sum {
@@ -9,18 +11,35 @@ struct Sum {
     sum3: SumSub,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, NodeMacro)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Node)]
 struct SumSub {
     a: i32,
     b: i32,
     sum: i32,
 }
 
-sum_sub_node!{}
-
 impl SumSubStateNode<'_> {
-    pub fn emit_sum(&self) {
+    fn emit_sum(&self) {
         self.sum.emit(*self.a + *self.b)
+    }
+}
+
+impl Sum {
+    fn update(node: &SumStateNode<'_>, message: SumMessage) {
+        use SumMessage::*;
+        use SumSubMessage::*;
+
+        match message {
+            sum1(a(_) | b(_)) => node.sum1.emit_sum(),
+            sum1(sum(s)) => node.sum3.a.emit(s),
+
+            sum2(a(_) | b(_)) => node.sum2.emit_sum(),
+            sum2(sum(s)) => node.sum3.b.emit(s),
+
+            sum3(a(_) | b(_)) => node.sum3.emit_sum(),
+
+            _ => (),
+        }
     }
 }
 
@@ -28,24 +47,11 @@ impl SumSubStateNode<'_> {
 fn sum() -> Result<()> { main() }
 
 fn main() -> Result<()> {
+    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+    
     let mut processor = Processor::<Sum>::new(
-        || {},
-        |node, message| {
-            use SumMessage::*;
-            use SumSubMessage::*;
-
-            match message {
-                sum1(a(_) | b(_)) => node.sum1.emit_sum(),
-                sum1(sum(s)) => node.sum3.a.emit(s),
-
-                sum2(a(_) | b(_)) => node.sum2.emit_sum(),
-                sum2(sum(s)) => node.sum3.b.emit(s),
-
-                sum3(a(_) | b(_)) => node.sum3.emit_sum(),
-
-                _ => (),
-            }
-        }
+        |result| if let Err(err) = result { log::info!("{err}") }, 
+        Sum::update,
     );
 
     processor.node().sum1.a.emit(1);

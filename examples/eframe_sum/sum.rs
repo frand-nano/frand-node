@@ -23,6 +23,25 @@ impl SumSubStateNode<'_> {
     }
 }
 
+impl Sum {
+    pub fn update(node: &SumStateNode<'_>, message: SumMessage) {
+        use SumMessage::*;
+        use SumSubMessage::*;
+
+        match message {
+            sum1(a(_) | b(_)) => node.sum1.emit_sum(),
+            sum1(sum(s)) => node.sum3.a.emit(s),
+
+            sum2(a(_) | b(_)) => node.sum2.emit_sum(),
+            sum2(sum(s)) => node.sum3.b.emit(s),
+
+            sum3(a(_) | b(_)) => node.sum3.emit_sum(),
+
+            _ => (),
+        }
+    }
+}
+
 pub trait IncButton<'a, S: State>: StateNode<'a, S> 
 where S: Display + Add<i32, Output = S> {
     fn view(&self, ui: &mut Ui) {

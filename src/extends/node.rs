@@ -9,7 +9,7 @@ mod frand_node {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TerminalNode<S: State> {
     key: NodeKey,
     reporter: Reporter,
