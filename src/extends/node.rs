@@ -69,6 +69,9 @@ where S::Node: Emitter<S> {
 impl<'sn, S: State> StateNode<'sn, S> for TerminalStateNode<'sn, S> 
 where S::Node: Emitter<S> {
     fn new(state: &'sn mut S, node: &'sn S::Node) -> Self { Self { state, node } }
+
+    fn clone_state(&self) -> S { self.state.clone() }
+
     fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()> {
         match packet.get_id(depth) {
             Some(_) => Err(packet.error(depth, "unknown id")),

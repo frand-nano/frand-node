@@ -1,7 +1,7 @@
 use anyhow::Result;
 use super::*;
 
-pub trait State: 'static + Default + Emitable {
+pub trait State: 'static + Default + Clone + Emitable {
     type Node: Node;
     type Message: Message;
     type StateNode<'sn>: StateNode<'sn, Self>;

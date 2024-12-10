@@ -135,6 +135,13 @@ pub fn expand(
                     #(#names: #state_node_tys::new(&mut state.#names, &node.#names),)*   
                 } 
             } 
+
+            fn clone_state(&self) -> #state_name { 
+                #state_name {
+                    #(#names: self.#names.clone_state(),)*   
+                }
+            }
+
             fn apply(&mut self, depth: usize, packet: &#mp::Packet) -> #mp::anyhow::Result<()> {
                 match packet.get_id(depth) {
                     #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
