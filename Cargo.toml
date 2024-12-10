@@ -27,3 +27,4 @@ debug = true
 
 [dev-dependencies]
 simplelog = "0.12"
+eframe = "0.29"

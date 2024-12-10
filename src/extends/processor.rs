@@ -21,6 +21,7 @@ impl<S: State> Deref for Processor<S> {
 
 impl<S: State> Processor<S> {
     pub fn node(&self) -> &S::Node { &self.input_node }
+    pub fn state_node(&mut self) -> S::StateNode<'_> { self.state.with(&self.input_node) }
 
     pub fn new<F>(
         callback: F,
