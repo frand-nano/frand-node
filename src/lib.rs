@@ -8,7 +8,7 @@ pub mod prelude {
     
     pub use crate::{
         bases::{
-            State, Node, Message, Emitter,    
+            State, Node, Message, StateNode, Emitter, Emitable,   
         },
         extends::Processor,        
     };
@@ -27,6 +27,6 @@ pub mod macro_prelude {
             Packet, 
             Reporter,
         },
-        extends::TerminalNode,
+        extends::{TerminalNode, TerminalStateNode},
     };
 }

@@ -8,10 +8,10 @@ pub struct Processor<S: State> {
     state: S,
     input_node: S::Node,
     process_node: S::Node,
-    update: fn(&S, &S::Node, S::Message) -> Result<()>,
     processed: HashSet<NodeKey>,    
     input_rx: Receiver<Packet>,
     process_rx: Receiver<Packet>,
+    update: fn(&S::StateNode<'_>, S::Message) -> Result<()>,
 }
 
 impl<S: State> Processor<S> {
@@ -20,7 +20,7 @@ impl<S: State> Processor<S> {
 
     pub fn new<F>(
         callback: F,
-        update: fn(&S, &S::Node, S::Message) -> Result<()>,
+        update: fn(&S::StateNode<'_>, S::Message) -> Result<()>,
     ) -> Self where F: 'static + Fn() {
         let (input_tx, input_rx) = unbounded();
         let (process_tx, process_rx) = unbounded();
@@ -34,14 +34,16 @@ impl<S: State> Processor<S> {
             state: S::default(),
             input_node: S::new_node(Reporter::new_callback(callback)),
             process_node: S::new_node(Reporter::new_sender(process_tx)),
-            update,
             processed: HashSet::new(),
             input_rx,
             process_rx,
+            update,
         }
     }
 
-    pub fn process(&mut self) -> Result<()> {
+    pub fn process<'sn>(&'sn mut self) -> Result<()> {
+        let mut state_node = self.state.with(&self.process_node);
+
         while let Ok(mut packet) = self.input_rx.try_recv() {
             loop {
                 if !self.processed.contains(packet.key()) {
@@ -49,9 +51,9 @@ impl<S: State> Processor<S> {
         
                     let message = S::Message::from_packet(0, &packet)?;
         
-                    self.state.apply(0, &packet)?;
+                    state_node.apply(0, &packet)?;
         
-                    (self.update)(&self.state, &self.process_node, message)?;
+                    (self.update)(&state_node, message)?;
                 }
                 match self.process_rx.try_recv() {
                     Ok(next) => packet = next,

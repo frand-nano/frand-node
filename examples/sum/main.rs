@@ -16,24 +16,30 @@ struct SumSub {
     sum: i32,
 }
 
+impl SumSubStateNode<'_> {
+    pub fn emit_sum(&self) -> Result<()> {
+        self.sum.emit(*self.a + *self.b)
+    }
+}
+
 #[test]
 fn sum() -> Result<()> { main() }
 
 fn main() -> Result<()> {
     let mut processor = Processor::<Sum>::new(
         || {},
-        |state, node, message| {
+        |node, message| {
             use SumMessage::*;
             use SumSubMessage::*;
 
             Ok(match message {
-                sum1(a(_) | b(_)) => node.sum1.sum.emit(state.sum1.a + state.sum1.b)?,
+                sum1(a(_) | b(_)) => node.sum1.emit_sum()?,
                 sum1(sum(s)) => node.sum3.a.emit(s)?,
 
-                sum2(a(_) | b(_)) => node.sum2.sum.emit(state.sum2.a + state.sum2.b)?,
+                sum2(a(_) | b(_)) => node.sum2.emit_sum()?,
                 sum2(sum(s)) => node.sum3.b.emit(s)?,
 
-                sum3(a(_) | b(_)) => node.sum3.sum.emit(state.sum3.a + state.sum3.b)?,
+                sum3(a(_) | b(_)) => node.sum3.emit_sum()?,
 
                 _ => (),
             })

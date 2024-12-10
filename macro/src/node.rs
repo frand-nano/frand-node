@@ -23,6 +23,11 @@ pub fn expand(
         state_name.span(),
     );
 
+    let state_node_name = Ident::new(
+        &format!("{}StateNode", state_name.to_string()).to_case(Case::Pascal), 
+        state_name.span(),
+    );
+
     let fields: Vec<&Field> = match &state.fields {
         Fields::Named(fields_named) => fields_named.named.iter().collect(),
         _ => unimplemented!("not supported"),
@@ -41,6 +46,10 @@ pub fn expand(
         quote!{ <#ty as #mp::State>::Message }
     ).collect();
 
+    let state_node_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #mp::State>::StateNode }
+    ).collect();
+
     Ok(quote!{
         #[derive(Debug)]
         #vis struct #node_name {
@@ -55,9 +64,15 @@ pub fn expand(
             #[allow(non_camel_case_types)] State(#[allow(dead_code)] #state_name),
         }
 
+        #vis struct #state_node_name<'sn> {
+            node: &'sn #node_name,
+            #(#viss #names: #state_node_tys<'sn>,)*
+        }
+
         impl #mp::State for #state_name {
             type Node = #node_name;
             type Message = #message_name;
+            type StateNode<'sn> = #state_node_name<'sn>;
 
             fn apply(
                 &mut self,  
@@ -91,6 +106,12 @@ pub fn expand(
             }
         }
 
+        impl #mp::Emitter<#state_name> for #node_name {
+            fn emit(&self, state: #state_name) -> #mp::anyhow::Result<()> {
+                self.reporter().report(state.into_packet(self.key().clone()))
+            }
+        }
+
         impl #mp::Message for #message_name {
             fn from_packet(depth: usize, packet: &#mp::Packet) -> #mp::anyhow::Result<Self> {
                 Ok(match packet.get_id(depth) {
@@ -100,6 +121,32 @@ pub fn expand(
                     Some(_) => Err(packet.error(depth, "unknown id")),
                     None => Ok(Self::State(packet.read_state())),
                 }?)     
+            }
+        }
+                
+        impl #mp::Emitter<#state_name> for #state_node_name<'_> {
+            fn emit(&self, state: #state_name) -> #mp::anyhow::Result<()> { self.node.emit(state) }
+        }
+
+        impl<'sn> #mp::StateNode<'sn, #state_name> for #state_node_name<'sn> {
+            fn new(state: &'sn mut #state_name, node: &'sn #node_name) -> Self { 
+                Self { 
+                    node, 
+                    #(#names: #state_node_tys::new(&mut state.#names, &node.#names),)*   
+                } 
+            } 
+            fn apply(&mut self, depth: usize, packet: &#mp::Packet) -> #mp::anyhow::Result<()> {
+                match packet.get_id(depth) {
+                    #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
+                    Some(_) => Err(packet.error(depth, "unknown id")),
+                    None => Ok(self.apply_state(packet.read_state())),
+                }        
+            }
+        }
+
+        impl #state_node_name<'_> {
+            pub fn apply_state(&mut self, state: #state_name) {
+                #(self.#names.apply_state(state.#names);)*       
             }
         }
     })

@@ -4,6 +4,7 @@ use super::*;
 pub trait State: 'static + Default + Emitable {
     type Node: Node;
     type Message: Message;
+    type StateNode<'sn>: StateNode<'sn, Self>;
 
     fn new_node<R: Into<Reporter>>(
         reporter: R,
@@ -11,17 +12,15 @@ pub trait State: 'static + Default + Emitable {
         Self::Node::new(vec![], None, &reporter.into()) 
     }
 
-    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()>;
+    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()>;    
+
+    fn with<'sn>(&'sn mut self, node: &'sn Self::Node) -> Self::StateNode<'sn> {
+        Self::StateNode::new(self, node)
+    }
 }
 
 impl<S: State> Emitable for S {
     fn into_packet(self, node_key: NodeKey) -> Packet { 
         Packet::new(node_key, self) 
-    }
-}
-
-impl<S: State> Emitter<S> for S::Node {
-    fn emit(&self, state: S) -> Result<()> {
-        self.reporter().report(state.into_packet(self.key().clone()))
     }
 }
