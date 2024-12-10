@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Deref};
 use bases::{NodeKey, Packet, Reporter};
 use crossbeam::channel::{unbounded, Receiver};
 use crate::*;
@@ -14,8 +14,12 @@ pub struct Processor<S: State> {
     update: fn(&S::StateNode<'_>, S::Message) -> Result<()>,
 }
 
+impl<S: State> Deref for Processor<S> {
+    type Target = S;
+    fn deref(&self) -> &Self::Target { &self.state }
+}
+
 impl<S: State> Processor<S> {
-    pub fn state(&self) -> &S { &self.state }
     pub fn node(&self) -> &S::Node { &self.input_node }
 
     pub fn new<F>(
@@ -49,9 +53,7 @@ impl<S: State> Processor<S> {
                 if !self.processed.contains(packet.key()) {
                     self.processed.insert(packet.key().clone());
         
-                    let message = S::Message::from_packet(0, &packet)?;
-        
-                    state_node.apply(0, &packet)?;
+                    let message = state_node.apply_export(0, &packet)?;
         
                     (self.update)(&state_node, message)?;
                 }

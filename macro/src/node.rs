@@ -141,12 +141,22 @@ pub fn expand(
                     #(#names: self.#names.clone_state(),)*   
                 }
             }
-
-            fn apply(&mut self, depth: usize, packet: &#mp::Packet) -> #mp::anyhow::Result<()> {
+            
+            fn apply_export(
+                &mut self, 
+                depth: usize, 
+                packet: &#mp::Packet,
+            ) -> #mp::anyhow::Result<#message_name> {
                 match packet.get_id(depth) {
-                    #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
+                    #(Some(#indexes) => {
+                        Ok(#message_name::#names(self.#names.apply_export(depth+1, packet)?))
+                    },)*
                     Some(_) => Err(packet.error(depth, "unknown id")),
-                    None => Ok(self.apply_state(packet.read_state())),
+                    None => {
+                        let state: #state_name = packet.read_state();    
+                        self.apply_state(state.clone());       
+                        Ok(#message_name::State(state))
+                    },
                 }        
             }
         }

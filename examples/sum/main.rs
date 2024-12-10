@@ -52,17 +52,17 @@ fn main() -> Result<()> {
     processor.node().sum2.b.emit(4)?;
     processor.process()?;
 
-    assert_eq!(processor.state().sum1.a, 1, "sum1.a");
-    assert_eq!(processor.state().sum1.b, 2, "sum1.b");
-    assert_eq!(processor.state().sum1.sum, 1 + 2, "sum1.sum");
+    assert_eq!(processor.sum1.a, 1, "sum1.a");
+    assert_eq!(processor.sum1.b, 2, "sum1.b");
+    assert_eq!(processor.sum1.sum, 1 + 2, "sum1.sum");
 
-    assert_eq!(processor.state().sum2.a, 3, "sum2.a");
-    assert_eq!(processor.state().sum2.b, 4, "sum2.b");
-    assert_eq!(processor.state().sum2.sum, 3 + 4, "sum2.sum");
+    assert_eq!(processor.sum2.a, 3, "sum2.a");
+    assert_eq!(processor.sum2.b, 4, "sum2.b");
+    assert_eq!(processor.sum2.sum, 3 + 4, "sum2.sum");
 
-    assert_eq!(processor.state().sum3.a, 1 + 2, "sum3.a");
-    assert_eq!(processor.state().sum3.b, 3 + 4, "sum3.b");
-    assert_eq!(processor.state().sum3.sum, 1 + 2 + 3 + 4, "sum3.sum");
+    assert_eq!(processor.sum3.a, 1 + 2, "sum3.a");
+    assert_eq!(processor.sum3.b, 3 + 4, "sum3.b");
+    assert_eq!(processor.sum3.sum, 1 + 2 + 3 + 4, "sum3.sum");
 
     Ok(())
 }
