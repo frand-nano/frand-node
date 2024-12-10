@@ -34,3 +34,9 @@ impl Reporter {
         }
     }
 }
+
+impl<F> From<F> for Reporter where F: 'static + Fn(Packet) {
+    fn from(callback: F) -> Self {
+        Self::new_callback(callback)
+    }
+}

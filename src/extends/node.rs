@@ -16,6 +16,10 @@ pub struct TerminalNode<S: State> {
     _phantom: PhantomData<S>,
 }
 
+impl<S: State + Default> Default for TerminalNode<S> {
+    fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
+}
+
 impl<S: State> Node for TerminalNode<S> {
     fn key(&self) -> &NodeKey { &self.key }
     fn reporter(&self) -> &Reporter { &self.reporter }

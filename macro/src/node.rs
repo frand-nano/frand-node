@@ -106,6 +106,10 @@ pub fn expand(
             }
         }
 
+        impl Default for #node_name {
+            fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
+        }
+
         impl #mp::Emitter<#state_name> for #node_name {
             fn emit(&self, state: #state_name) {
                 self.reporter().report(state.into_packet(self.key().clone()))
