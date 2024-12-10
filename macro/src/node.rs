@@ -107,7 +107,7 @@ pub fn expand(
         }
 
         impl #mp::Emitter<#state_name> for #node_name {
-            fn emit(&self, state: #state_name) -> #mp::anyhow::Result<()> {
+            fn emit(&self, state: #state_name) {
                 self.reporter().report(state.into_packet(self.key().clone()))
             }
         }
@@ -125,7 +125,7 @@ pub fn expand(
         }
                 
         impl #mp::Emitter<#state_name> for #state_node_name<'_> {
-            fn emit(&self, state: #state_name) -> #mp::anyhow::Result<()> { self.node.emit(state) }
+            fn emit(&self, state: #state_name) { self.node.emit(state) }
         }
 
         impl<'sn> #mp::StateNode<'sn, #state_name> for #state_node_name<'sn> {

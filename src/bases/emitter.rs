@@ -1,10 +1,9 @@
-use anyhow::Result;
 use std::fmt::Debug;
 use serde::{de::DeserializeOwned, Serialize};
 use super::{NodeKey, Packet, State};
 
 pub trait Emitter<S: State> {
-    fn emit(&self, state: S) -> Result<()>;
+    fn emit(&self, state: S);
 }
 
 pub trait Emitable: Debug + Serialize + DeserializeOwned {

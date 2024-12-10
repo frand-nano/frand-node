@@ -1,5 +1,4 @@
 use std::{fmt::Display, ops::Add};
-use anyhow::Result;
 use eframe::egui::Ui;
 use serde::{Deserialize, Serialize};
 use frand_node::*;
@@ -19,7 +18,7 @@ pub struct SumSub {
 }
 
 impl SumSubStateNode<'_> {
-    pub fn emit_sum(&self) -> Result<()> {
+    pub fn emit_sum(&self) {
         self.sum.emit(*self.a + *self.b)
     }
 }
@@ -30,7 +29,7 @@ where S: Display + Add<i32, Output = S> {
         let value = self.clone_state();
 
         if ui.button(format!(" {value} ")).clicked() {
-            self.emit(value + 1).unwrap();
+            self.emit(value + 1);
         }
     }
 }

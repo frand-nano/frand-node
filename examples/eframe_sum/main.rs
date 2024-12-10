@@ -16,17 +16,17 @@ impl App {
                 use SumMessage::*;
                 use SumSubMessage::*;
 
-                Ok(match message {
-                    sum1(a(_) | b(_)) => node.sum1.emit_sum()?,
-                    sum1(sum(s)) => node.sum3.a.emit(s)?,
+                match message {
+                    sum1(a(_) | b(_)) => node.sum1.emit_sum(),
+                    sum1(sum(s)) => node.sum3.a.emit(s),
 
-                    sum2(a(_) | b(_)) => node.sum2.emit_sum()?,
-                    sum2(sum(s)) => node.sum3.b.emit(s)?,
+                    sum2(a(_) | b(_)) => node.sum2.emit_sum(),
+                    sum2(sum(s)) => node.sum3.b.emit(s),
 
-                    sum3(a(_) | b(_)) => node.sum3.emit_sum()?,
+                    sum3(a(_) | b(_)) => node.sum3.emit_sum(),
 
                     _ => (),
-                })
+                }
             },
         ) }
     }

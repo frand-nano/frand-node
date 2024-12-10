@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use anyhow::Result;
 use crossbeam::channel::Sender;
 use crate::bases::Packet;
 
@@ -27,10 +26,11 @@ impl Reporter {
         Self::Sender(sender) 
     }
 
-    pub fn report(&self, packet: Packet) -> Result<()> {
-        Ok(match self {
+    pub fn report(&self, packet: Packet) {
+        match self {
             Reporter::Callback(callback) => callback(packet),
-            Reporter::Sender(sender) => sender.send(packet)?,
-        })
+            Reporter::Sender(sender) => sender.send(packet)
+            .unwrap_or_else(|err| log::trace!("{err}")),
+        }
     }
 }

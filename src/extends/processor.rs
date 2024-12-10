@@ -11,7 +11,7 @@ pub struct Processor<S: State> {
     processed: HashSet<NodeKey>,    
     input_rx: Receiver<Packet>,
     process_rx: Receiver<Packet>,
-    update: fn(&S::StateNode<'_>, S::Message) -> Result<()>,
+    update: fn(&S::StateNode<'_>, S::Message),
 }
 
 impl<S: State> Deref for Processor<S> {
@@ -25,7 +25,7 @@ impl<S: State> Processor<S> {
 
     pub fn new<F>(
         callback: F,
-        update: fn(&S::StateNode<'_>, S::Message) -> Result<()>,
+        update: fn(&S::StateNode<'_>, S::Message),
     ) -> Self where F: 'static + Fn() {
         let (input_tx, input_rx) = unbounded();
         let (process_tx, process_rx) = unbounded();
@@ -56,7 +56,7 @@ impl<S: State> Processor<S> {
         
                     let message = state_node.apply_export(0, &packet)?;
         
-                    (self.update)(&state_node, message)?;
+                    (self.update)(&state_node, message);
                 }
                 match self.process_rx.try_recv() {
                     Ok(next) => packet = next,

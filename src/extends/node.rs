@@ -36,7 +36,7 @@ impl<S: State> Node for TerminalNode<S> {
 }
 
 impl<S: State> Emitter<S> for TerminalNode<S> {
-    fn emit(&self, state: S) -> Result<()> {
+    fn emit(&self, state: S) {
         self.reporter().report(state.into_packet(self.key().clone()))
     }
 }
@@ -63,7 +63,7 @@ impl<S: State> DerefMut for TerminalStateNode<'_, S> {
 
 impl<S: State> Emitter<S> for TerminalStateNode<'_, S> 
 where S::Node: Emitter<S> {
-    fn emit(&self, state: S) -> Result<()> { self.node.emit(state) }
+    fn emit(&self, state: S) { self.node.emit(state) }
 }
 
 impl<'sn, S: State> StateNode<'sn, S> for TerminalStateNode<'sn, S> 
