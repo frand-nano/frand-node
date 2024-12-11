@@ -1,6 +1,6 @@
 use super::{AnchorId, AnchorKey, Reporter};
 
-pub trait Anchor: 'static + Clone {
+pub trait Anchor: 'static + Clone + Send + Sync {
     fn key(&self) -> &AnchorKey;
     fn reporter(&self) -> &Reporter;
 

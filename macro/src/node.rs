@@ -64,22 +64,34 @@ pub fn expand(
             #[allow(non_camel_case_types)] State(#[allow(dead_code)] #state_name),
         }
 
-        #vis struct #node_name<'sn> {
-            anchor: &'sn #anchor_name,
-            #(#viss #names: #node_tys<'sn>,)*
+        #vis struct #node_name<'n> {
+            anchor: &'n #anchor_name,
+            #(#viss #names: #node_tys<'n>,)*
         }
 
         impl #mp::State for #state_name {
             type Anchor = #anchor_name;
             type Message = #message_name;
-            type Node<'sn> = #node_name<'sn>;
+            type Node<'n> = #node_name<'n>;
 
             fn apply(
+                &mut self, 
+                depth: usize, 
+                packet: #mp::Packet,
+            ) -> #mp::anyhow::Result<()> {
+                match packet.get_id(depth) {
+                    #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
+                    Some(_) => Err(packet.error(depth, "unknown id")),
+                    None => Ok(*self = packet.read_state()),
+                }
+            }    
+
+            fn apply_message(
                 &mut self,  
                 message: #message_name,
             ) {
                 match message {
-                    #(#message_name::#names(message) => self.#names.apply(message),)*
+                    #(#message_name::#names(message) => self.#names.apply_message(message),)*
                     #message_name::State(state) => *self = state,
                 }
             }
@@ -105,12 +117,20 @@ pub fn expand(
         }
 
         impl Default for #anchor_name {
-            fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
+            fn default() -> Self { Self::new(vec![], None, &#mp::Reporter::None) }
         }
 
-        impl #mp::Emitter<#state_name> for #anchor_name {
-            fn emit(&self, state: #state_name) {
-                self.reporter().report(state.into_packet(self.key().clone()))
+        impl #mp::Emitter for #anchor_name {
+            fn emit<E: 'static + #mp::Emitable>(&self, emitable: E) {
+                self.reporter().report(self.key(), emitable)
+            }
+            
+            fn emit_future<Fu, E>(&self, future: Fu) 
+            where 
+            Fu: 'static + std::future::Future<Output = E> + Send,
+            E: 'static + #mp::Emitable + Sized,
+            {
+                self.reporter().report_future(self.key(), future)
             }
         }
 
@@ -126,12 +146,22 @@ pub fn expand(
             }
         }
                 
-        impl #mp::Emitter<#state_name> for #node_name<'_> {
-            fn emit(&self, state: #state_name) { self.anchor.emit(state) }
+        impl #mp::Emitter for #node_name<'_> {
+            fn emit<E: 'static + #mp::Emitable>(&self, emitable: E) { 
+                self.anchor.emit(emitable) 
+            }    
+        
+            fn emit_future<Fu, E>(&self, future: Fu) 
+            where 
+            Fu: 'static + std::future::Future<Output = E> + Send,
+            E: 'static + #mp::Emitable + Sized,
+            {
+                self.anchor.emit_future(future) 
+            }
         }
 
-        impl<'sn> #mp::Node<'sn, #state_name> for #node_name<'sn> {
-            fn new(state: &'sn #state_name, anchor: &'sn #anchor_name) -> Self { 
+        impl<'n> #mp::Node<'n, #state_name> for #node_name<'n> {
+            fn new(state: &'n #state_name, anchor: &'n #anchor_name) -> Self { 
                 Self { 
                     anchor, 
                     #(#names: #node_tys::new(&state.#names, &anchor.#names),)*   
@@ -142,6 +172,18 @@ pub fn expand(
                 #state_name {
                     #(#names: self.#names.clone_state(),)*   
                 }
+            }
+
+            fn apply(
+                &mut self, 
+                depth: usize, 
+                packet: &#mp::Packet,
+            ) -> #mp::anyhow::Result<()> {
+                match packet.get_id(depth) {
+                    #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
+                    Some(_) => Err(packet.error(depth, "unknown id")),
+                    None => Ok(self.apply_state(packet.read_state())),
+                } 
             }
             
             fn apply_export(

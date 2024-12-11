@@ -15,8 +15,11 @@ pub mod prelude {
     pub use crate::{
         bases::{
             State, Anchor, Message, Node, Emitter, Emitable,   
+            Packet,
         },
-        extends::Processor,        
+        extends::{
+            Container, Processor, AsyncProcessor,
+        },        
     };
 }
 
@@ -32,7 +35,6 @@ pub mod macro_prelude {
     pub use crate::{
         bases::{
             Header, AnchorKey, AnchorId, 
-            Packet, 
             Reporter,
         },
         extends::{TerminalAnchor, TerminalNode},

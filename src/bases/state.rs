@@ -1,9 +1,11 @@
+use anyhow::Result;
+use serde::Serialize;
 use super::*;
 
 pub trait State: 'static + Default + Clone + Emitable {
     type Anchor: Anchor;
     type Message: Message;
-    type Node<'sn>: Node<'sn, Self>;
+    type Node<'n>: Node<'n, Self>;
 
     fn new_anchor<R: Into<Reporter>>(
         reporter: R,
@@ -11,15 +13,20 @@ pub trait State: 'static + Default + Clone + Emitable {
         Self::Anchor::new(vec![], None, &reporter.into()) 
     }
 
-    fn apply(&mut self, message: Self::Message);    
+    fn apply(&mut self, depth: usize, packet: Packet) -> Result<()>;    
+    fn apply_message(&mut self, message: Self::Message);    
 
-    fn with<'sn>(&'sn self, anchor: &'sn Self::Anchor) -> Self::Node<'sn> {
+    fn with<'n>(&'n self, anchor: &'n Self::Anchor) -> Self::Node<'n> {
         Self::Node::new(self, anchor)
     }
 }
 
-impl<S: State> Emitable for S {
-    fn into_packet(self, anchor_key: AnchorKey) -> Packet { 
+impl<S: State + Serialize> Emitable for S {
+    fn to_packet(&self, anchor_key: &AnchorKey) -> Packet { 
+        Packet::new(anchor_key, self.to_owned()) 
+    }
+
+    fn into_packet(self, anchor_key: &AnchorKey) -> Packet { 
         Packet::new(anchor_key, self) 
     }
 }

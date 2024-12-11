@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use anyhow::{anyhow, Error};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{Emitable, State};
 
 pub type AnchorId = u32;
@@ -22,7 +22,10 @@ impl Packet {
         self.key().get(depth).copied()
     }
 
-    pub fn new<E: Emitable>(anchor_key: AnchorKey, emitable: E) -> Self {
+    pub fn new<E: Emitable + Serialize>(
+        anchor_key: &AnchorKey, 
+        emitable: E,
+    ) -> Self {
         let mut buffer = Vec::new();
 
         ciborium::into_writer(&emitable, &mut buffer)
@@ -31,12 +34,12 @@ impl Packet {
         );
 
         Packet {
-            header: anchor_key,
+            header: anchor_key.to_owned(),
             payload: buffer.into_boxed_slice(),
         }      
     }
 
-    pub fn read_state<S: State>(&self) -> S {
+    pub fn read_state<S: State + DeserializeOwned>(&self) -> S {
         ciborium::from_reader(Cursor::new(&self.payload))
         .unwrap_or_else(|err| 
             panic!("deserialize CBOR with {:#?} -> Err({err})", self.payload)

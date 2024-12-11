@@ -1,5 +1,6 @@
 use anyhow::Result;
-use std::{borrow::Cow, marker::PhantomData, ops::Deref};
+use serde::de::DeserializeOwned;
+use std::{borrow::Cow, future::Future, marker::PhantomData, ops::Deref};
 use bases::{AnchorId, AnchorKey, Packet, Reporter, Node};
 use crate::*;
 
@@ -17,7 +18,7 @@ pub struct TerminalAnchor<S: State> {
 }
 
 impl<S: State + Default> Default for TerminalAnchor<S> {
-    fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
+    fn default() -> Self { Self::new(vec![], None, &Reporter::None) }
 }
 
 impl<S: State> Anchor for TerminalAnchor<S> {
@@ -39,15 +40,23 @@ impl<S: State> Anchor for TerminalAnchor<S> {
     }
 }
 
-impl<S: State> Emitter<S> for TerminalAnchor<S> {
-    fn emit(&self, state: S) {
-        self.reporter().report(state.into_packet(self.key().clone()))
+impl<S: State> Emitter for TerminalAnchor<S> {
+    fn emit<E: 'static + Emitable>(&self, emitable: E) {
+        self.reporter().report(self.key(), emitable)
+    }
+    
+    fn emit_future<Fu, E>(&self, future: Fu) 
+    where 
+    Fu: 'static + Future<Output = E> + Send,
+    E: 'static + Emitable + Sized,
+    {
+        self.reporter().report_future(self.key(), future)
     }
 }
 
-pub struct TerminalNode<'sn, S: State> {
-    state: Cow<'sn, S>,
-    anchor: &'sn S::Anchor,
+pub struct TerminalNode<'n, S: State> {
+    state: Cow<'n, S>,
+    anchor: &'n S::Anchor,
 }
 
 impl<S: State> TerminalNode<'_, S> {
@@ -61,21 +70,38 @@ impl<S: State> Deref for TerminalNode<'_, S> {
     fn deref(&self) -> &Self::Target { &self.state }
 }
 
-impl<S: State> Emitter<S> for TerminalNode<'_, S> 
-where S::Anchor: Emitter<S> {
-    fn emit(&self, state: S) { self.anchor.emit(state) }
+impl<S: State> Emitter for TerminalNode<'_, S> 
+where S::Anchor: Emitter {
+    fn emit<E: 'static + Emitable>(&self, emitable: E) { 
+        self.anchor.emit(emitable) 
+    }    
+
+    fn emit_future<Fu, E>(&self, future: Fu) 
+    where 
+    Fu: 'static + Future<Output = E> + Send,
+    E: 'static + Emitable + Sized,
+    {
+        self.anchor.emit_future(future) 
+    }
 }
 
-impl<'sn, S: State> Node<'sn, S> for TerminalNode<'sn, S> 
+impl<'n, S: State> Node<'n, S> for TerminalNode<'n, S> 
 where 
-S::Anchor: Emitter<S>,
-S: State<Message = S>,
+S::Anchor: Emitter,
+S: State<Message = S> + DeserializeOwned,
 {
-    fn new(state: &'sn S, anchor: &'sn S::Anchor) -> Self { 
+    fn new(state: &'n S, anchor: &'n S::Anchor) -> Self { 
         Self { state: Cow::Borrowed(state), anchor } 
     }
 
     fn clone_state(&self) -> S { self.state.clone().into_owned() }
+
+    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()> {
+        match packet.get_id(depth) {
+            Some(_) => Err(packet.error(depth, "unknown id")),
+            None => Ok(*self.state.to_mut() = packet.read_state()),
+        }        
+    }
 
     fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<S::Message> {
         match packet.get_id(depth) {
@@ -111,9 +137,20 @@ macro_rules! impl_node_for {
             impl frand_node::macro_prelude::State for $tys {
                 type Anchor = frand_node::macro_prelude::TerminalAnchor<Self>;
                 type Message = Self;
-                type Node<'sn> = frand_node::macro_prelude::TerminalNode<'sn, Self>;
+                type Node<'n> = frand_node::macro_prelude::TerminalNode<'n, Self>;
 
                 fn apply(
+                    &mut self, 
+                    depth: usize, 
+                    packet: frand_node::macro_prelude::Packet,
+                ) -> frand_node::macro_prelude::anyhow::Result<()>  {
+                    match packet.get_id(depth) {
+                        Some(_) => Err(packet.error(depth, "unknown id")),
+                        None => Ok(*self = packet.read_state()),
+                    }
+                }    
+
+                fn apply_message(
                     &mut self,  
                     message: Self::Message,
                 ) {
