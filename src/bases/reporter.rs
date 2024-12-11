@@ -2,9 +2,9 @@ use std::{future::Future, sync::Arc};
 use crossbeam::channel::Sender;
 use futures::{future::BoxFuture, FutureExt};
 use crate::bases::Packet;
-use super::{AnchorKey, Emitable};
+use super::{NodeKey, Emitable};
 
-pub type EmitableFuture = (AnchorKey, BoxFuture<'static, Box<dyn Emitable>>);
+pub type EmitableFuture = (NodeKey, BoxFuture<'static, Box<dyn Emitable>>);
 
 #[derive(Clone)]
 pub enum Reporter {
@@ -24,7 +24,7 @@ impl std::fmt::Debug for Reporter {
                 write!(f, "Reporter::Sender({:#?})", sender)
             },
             Reporter::FutureCallback(_) => {
-                write!(f, "Reporter::FutureCallback(Arc<dyn Fn((AnchorKey, BoxFuture<dyn Emitable>)) + Send + Sync>)")
+                write!(f, "Reporter::FutureCallback(Arc<dyn Fn((NodeKey, BoxFuture<dyn Emitable>)) + Send + Sync>)")
             },
             Reporter::None => write!(f, "Reporter::None"),
         }
@@ -48,7 +48,7 @@ impl Reporter {
 
     pub fn report<E: 'static + Emitable>(
         &self, 
-        anchor_key: &AnchorKey, 
+        anchor_key: &NodeKey, 
         emitable: E,
     ) {
         match self {
@@ -69,7 +69,7 @@ impl Reporter {
 
     pub fn report_future<Fu, E>(
         &self, 
-        anchor_key: &AnchorKey, 
+        anchor_key: &NodeKey, 
         future: Fu,
     ) 
     where 

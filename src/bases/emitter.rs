@@ -1,5 +1,5 @@
 use std::{fmt::Debug, future::Future};
-use super::{AnchorKey, Packet};
+use super::{NodeKey, Packet};
 
 pub trait Emitter {
     fn emit<E: 'static + Emitable>(&self, emitable: E);
@@ -10,11 +10,11 @@ pub trait Emitter {
 }
 
 pub trait Emitable: Debug + Send + Sync {
-    fn to_packet(&self, anchor_key: &AnchorKey) -> Packet;
-    fn into_packet(self, anchor_key: &AnchorKey) -> Packet;
+    fn to_packet(&self, anchor_key: &NodeKey) -> Packet;
+    fn into_packet(self, anchor_key: &NodeKey) -> Packet;
 }
 
 impl Emitable for Packet {
-    fn to_packet(&self, _anchor_key: &AnchorKey) -> Packet { self.to_owned() }
-    fn into_packet(self, _anchor_key: &AnchorKey) -> Packet { self }
+    fn to_packet(&self, _anchor_key: &NodeKey) -> Packet { self.to_owned() }
+    fn into_packet(self, _anchor_key: &NodeKey) -> Packet { self }
 }

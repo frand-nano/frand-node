@@ -21,7 +21,7 @@ impl App {
         );
 
         let ctx = cc.egui_ctx.clone();
-        let anchor = processor.anchor().clone();
+        let node = processor.node().clone();
 
         spawn(move || {
             let mut last = Instant::now();
@@ -29,7 +29,7 @@ impl App {
                 let now = Instant::now();
 
                 if let Some(delta) = now.checked_duration_since(last) {
-                    anchor.delta.emit(delta.as_secs_f32());
+                    node.delta.emit(delta.as_secs_f32());
                     ctx.request_repaint();
                 }
 
@@ -45,10 +45,8 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {    
-        let node = self.processor.new_node();
-
         CentralPanel::default().show(ctx, |ui| {
-            node.view(ui);
+            self.processor.view(ui);
         });
 
         self.processor.process().unwrap();

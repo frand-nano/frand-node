@@ -3,30 +3,32 @@ use serde::Serialize;
 use super::*;
 
 pub trait State: 'static + Default + Clone + Emitable {
-    type Anchor: Anchor;
     type Message: Message;
-    type Node<'n>: Node<'n, Self>;
+    type Node: Node<Self>;
 
-    fn new_anchor<R: Into<Reporter>>(
+    fn new_node<R: Into<Reporter>>(
         reporter: R,
-    ) -> Self::Anchor { 
-        Self::Anchor::new(vec![], None, &reporter.into()) 
+    ) -> Self::Node { 
+        Self::Node::new(vec![], None, &reporter.into()) 
+    }
+
+    fn new_node_from<R: Into<Reporter>>(
+        node: &Self::Node,
+        reporter: R,
+    ) -> Self::Node { 
+        Self::Node::new_from(node, &reporter.into()) 
     }
 
     fn apply(&mut self, depth: usize, packet: Packet) -> Result<()>;    
     fn apply_message(&mut self, message: Self::Message);    
-
-    fn with<'n>(&'n self, anchor: &'n Self::Anchor) -> Self::Node<'n> {
-        Self::Node::new(self, anchor)
-    }
 }
 
 impl<S: State + Serialize> Emitable for S {
-    fn to_packet(&self, anchor_key: &AnchorKey) -> Packet { 
+    fn to_packet(&self, anchor_key: &NodeKey) -> Packet { 
         Packet::new(anchor_key, self.to_owned()) 
     }
 
-    fn into_packet(self, anchor_key: &AnchorKey) -> Packet { 
+    fn into_packet(self, anchor_key: &NodeKey) -> Packet { 
         Packet::new(anchor_key, self) 
     }
 }

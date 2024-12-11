@@ -17,7 +17,7 @@ pub struct SumSub {
     pub sum: i32,
 }
 
-impl SumsNode<'_> {
+impl SumsNode {
     pub fn handle(&self, message: SumsMessage) {
         use SumsMessage::*;
         use SumSubMessage::*;
@@ -39,14 +39,14 @@ impl SumsNode<'_> {
     }
 }
 
-impl SumSubNode<'_> {
+impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_expensive_sum(&self) {
-        let a = *self.a;
-        let b = *self.b;
+        let a = *self.a.v();
+        let b = *self.b.v();
 
         self.sum.emit_future(async move { 
-            sleep(Duration::from_millis(2000)).await;
+            sleep(Duration::from_millis(1000)).await;
             a + b 
         })
     }

@@ -3,10 +3,10 @@ use anyhow::{anyhow, Error};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{Emitable, State};
 
-pub type AnchorId = u32;
-pub type AnchorKey = Box<[AnchorId]>;
+pub type NodeId = u32;
+pub type NodeKey = Box<[NodeId]>;
 
-pub type Header = AnchorKey;
+pub type Header = NodeKey;
 pub type Payload = Box<[u8]>;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -16,14 +16,14 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn key(&self) -> &AnchorKey { &self.header }
+    pub fn key(&self) -> &NodeKey { &self.header }
 
-    pub fn get_id(&self, depth: usize) -> Option<AnchorId> { 
+    pub fn get_id(&self, depth: usize) -> Option<NodeId> { 
         self.key().get(depth).copied()
     }
 
     pub fn new<E: Emitable + Serialize>(
-        anchor_key: &AnchorKey, 
+        anchor_key: &NodeKey, 
         emitable: E,
     ) -> Self {
         let mut buffer = Vec::new();

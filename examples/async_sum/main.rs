@@ -1,7 +1,7 @@
 use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame};
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use tokio::{runtime::Runtime, sync::mpsc::{unbounded_channel, UnboundedReceiver}};
+use tokio::runtime::Runtime;
 use frand_node::*;
 use sum::*;
 use view::*;
@@ -10,9 +10,7 @@ mod sum;
 mod view;
 
 struct App {    
-    state: Sums,
-    anchor: SumsAnchor,
-    view_rx: UnboundedReceiver<Packet>,
+    node: SumsNode,
 }
 
 impl App {
@@ -22,39 +20,26 @@ impl App {
             |node, message| node.handle(message),
         );
 
-        let state = processor.state().clone();
-        let anchor = processor.anchor().clone();
-        let (view_tx, view_rx) = unbounded_channel();
+        let node = processor.node().clone();
 
         let ctx = cc.egui_ctx.clone();
         runtime.spawn(async move {
             let mut processor_output_rx = processor.take_output_rx().unwrap();
             processor.start().await;
             
-            while let Some(packet) = processor_output_rx.recv().await {
-                view_tx.send(packet).unwrap();
+            while let Some(_) = processor_output_rx.recv().await {
                 ctx.request_repaint();
             }
         });
         
-        Self { 
-            state, 
-            anchor, 
-            view_rx, 
-        }
+        Self { node }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {    
-        while let Ok(packet) = self.view_rx.try_recv() {
-            self.state.apply(0, packet).unwrap();
-        }
-
-        let node = self.state.with(&self.anchor);
-
         CentralPanel::default().show(ctx, |ui| {
-            node.view("sum", ui);
+            self.node.view("sum", ui);
         });
     }
 }

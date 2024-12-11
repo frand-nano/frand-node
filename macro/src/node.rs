@@ -3,7 +3,7 @@ use syn::*;
 use quote::quote;
 use convert_case::{Case, Casing};
 
-pub type AnchorId = u32;
+pub type NodeId = u32;
 
 pub fn expand(
     state: &ItemStruct,
@@ -12,11 +12,6 @@ pub fn expand(
 
     let vis = &state.vis;
     let state_name = state.ident.clone();
-
-    let anchor_name = Ident::new(
-        &format!("{}Anchor", state.ident.to_string()).to_case(Case::Pascal), 
-        state.ident.span(),
-    );
 
     let message_name = Ident::new(
         &format!("{}Message", state_name.to_string()).to_case(Case::Pascal), 
@@ -34,13 +29,9 @@ pub fn expand(
     };  
 
     let viss: Vec<_> = fields.iter().map(|field| &field.vis).collect();
-    let indexes: Vec<_> = (0..fields.len() as AnchorId).into_iter().collect();
+    let indexes: Vec<_> = (0..fields.len() as NodeId).into_iter().collect();
     let names: Vec<_> = fields.iter().filter_map(|field| field.ident.as_ref()).collect();
     let tys: Vec<_> = fields.iter().map(|field| &field.ty).collect();
-
-    let anchor_tys: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <#ty as #mp::State>::Anchor }
-    ).collect();
 
     let message_tys: Vec<_> = tys.iter().map(|ty| 
         quote!{ <#ty as #mp::State>::Message }
@@ -52,27 +43,21 @@ pub fn expand(
 
     Ok(quote!{
         #[derive(Debug, Clone)]
-        #vis struct #anchor_name {
-            key: #mp::AnchorKey,
-            reporter: #mp::Reporter,
-            #(#viss #names: #anchor_tys,)*
-        }
-
-        #[derive(Debug, Clone)]
         #vis enum #message_name {
             #(#[allow(non_camel_case_types)] #names(#[allow(dead_code)] #message_tys),)*
             #[allow(non_camel_case_types)] State(#[allow(dead_code)] #state_name),
         }
 
-        #vis struct #node_name<'n> {
-            anchor: &'n #anchor_name,
-            #(#viss #names: #node_tys<'n>,)*
+        #[derive(Debug, Clone)]
+        #vis struct #node_name {
+            key: #mp::NodeKey,
+            reporter: #mp::Reporter,
+            #(#viss #names: #node_tys,)*
         }
 
         impl #mp::State for #state_name {
-            type Anchor = #anchor_name;
             type Message = #message_name;
-            type Node<'n> = #node_name<'n>;
+            type Node = #node_name;
 
             fn apply(
                 &mut self, 
@@ -97,41 +82,8 @@ pub fn expand(
             }
         }
 
-        impl #mp::Anchor for #anchor_name {
-            fn key(&self) -> &#mp::AnchorKey { &self.key }
-            fn reporter(&self) -> &#mp::Reporter { &self.reporter }
-        
-            fn new(
-                mut key: Vec<#mp::AnchorId>,
-                id: Option<#mp::AnchorId>,
-                reporter: &#mp::Reporter,
-            ) -> Self {
-                if let Some(id) = id { key.push(id); }
-        
-                Self { 
-                    #(#names: #anchor_tys::new(key.clone(), Some(#indexes), reporter),)*   
-                    key: key.into_boxed_slice(),      
-                    reporter: reporter.clone(),
-                }
-            }
-        }
-
-        impl Default for #anchor_name {
+        impl Default for #node_name {
             fn default() -> Self { Self::new(vec![], None, &#mp::Reporter::None) }
-        }
-
-        impl #mp::Emitter for #anchor_name {
-            fn emit<E: 'static + #mp::Emitable>(&self, emitable: E) {
-                self.reporter().report(self.key(), emitable)
-            }
-            
-            fn emit_future<Fu, E>(&self, future: Fu) 
-            where 
-            Fu: 'static + std::future::Future<Output = E> + Send,
-            E: 'static + #mp::Emitable + Sized,
-            {
-                self.reporter().report_future(self.key(), future)
-            }
         }
 
         impl #mp::Message for #message_name {
@@ -146,9 +98,9 @@ pub fn expand(
             }
         }
                 
-        impl #mp::Emitter for #node_name<'_> {
+        impl #mp::Emitter for #node_name {
             fn emit<E: 'static + #mp::Emitable>(&self, emitable: E) { 
-                self.anchor.emit(emitable) 
+                self.reporter.report(&self.key, emitable)
             }    
         
             fn emit_future<Fu, E>(&self, future: Fu) 
@@ -156,17 +108,38 @@ pub fn expand(
             Fu: 'static + std::future::Future<Output = E> + Send,
             E: 'static + #mp::Emitable + Sized,
             {
-                self.anchor.emit_future(future) 
+                self.reporter.report_future(&self.key, future)
             }
         }
 
-        impl<'n> #mp::Node<'n, #state_name> for #node_name<'n> {
-            fn new(state: &'n #state_name, anchor: &'n #anchor_name) -> Self { 
+        impl #mp::Node<#state_name> for #node_name {
+            fn key(&self) -> &#mp::NodeKey { &self.key }
+            fn reporter(&self) -> &#mp::Reporter { &self.reporter }
+        
+            fn new(
+                mut key: Vec<#mp::NodeId>,
+                id: Option<#mp::NodeId>,
+                reporter: &#mp::Reporter,
+            ) -> Self {
+                if let Some(id) = id { key.push(id); }
+        
                 Self { 
-                    anchor, 
-                    #(#names: #node_tys::new(&state.#names, &anchor.#names),)*   
-                } 
-            } 
+                    #(#names: #node_tys::new(key.clone(), Some(#indexes), reporter),)*   
+                    key: key.into_boxed_slice(),      
+                    reporter: reporter.clone(),
+                }
+            }
+
+            fn new_from(
+                node: &Self,
+                reporter: &#mp::Reporter,
+            ) -> Self {
+                Self { 
+                    #(#names: #node_tys::new_from(&node.#names, reporter),)*  
+                    key: node.key.clone(),   
+                    reporter: reporter.clone(),
+                }
+            }
 
             fn clone_state(&self) -> #state_name { 
                 #state_name {
@@ -205,7 +178,7 @@ pub fn expand(
             }
         }
 
-        impl #node_name<'_> {
+        impl #node_name {
             pub fn apply_state(&mut self, state: #state_name) {
                 #(self.#names.apply_state(state.#names);)*       
             }

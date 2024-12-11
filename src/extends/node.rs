@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::de::DeserializeOwned;
-use std::{borrow::Cow, future::Future, marker::PhantomData, ops::Deref};
-use bases::{AnchorId, AnchorKey, Packet, Reporter, Node};
+use std::{future::Future, sync::{Arc, RwLock, RwLockReadGuard}};
+use bases::{NodeId, NodeKey, Packet, Reporter, Node};
 use crate::*;
 
 mod frand_node {
@@ -11,38 +11,30 @@ mod frand_node {
 }
 
 #[derive(Debug, Clone)]
-pub struct TerminalAnchor<S: State> {
-    key: AnchorKey,
+pub struct TerminalNode<S: State> {
+    key: NodeKey,
     reporter: Reporter,
-    _phantom: PhantomData<S>,
+    state: Arc<RwLock<S>>,
 }
 
-impl<S: State + Default> Default for TerminalAnchor<S> {
+impl<S: State + Default> Default for TerminalNode<S> 
+where S: State<Message = S> + DeserializeOwned {    
     fn default() -> Self { Self::new(vec![], None, &Reporter::None) }
 }
 
-impl<S: State> Anchor for TerminalAnchor<S> {
-    fn key(&self) -> &AnchorKey { &self.key }
-    fn reporter(&self) -> &Reporter { &self.reporter }
+impl<S: State> TerminalNode<S> {
+    pub fn v<'a>(&'a self) -> RwLockReadGuard<'a, S> { 
+        self.state.read().unwrap() 
+    }
 
-    fn new(
-        mut key: Vec<AnchorId>,
-        id: Option<AnchorId>,
-        reporter: &Reporter,
-    ) -> Self {
-        if let Some(id) = id { key.push(id); }
-
-        Self { 
-            key: key.into_boxed_slice(),   
-            reporter: reporter.clone(),
-            _phantom: PhantomData::default(), 
-        }
+    pub fn apply_state(&mut self, state: S) {
+        *self.state.write().unwrap() = state;       
     }
 }
 
-impl<S: State> Emitter for TerminalAnchor<S> {
+impl<S: State> Emitter for TerminalNode<S> {
     fn emit<E: 'static + Emitable>(&self, emitable: E) {
-        self.reporter().report(self.key(), emitable)
+        self.reporter.report(&self.key, emitable)
     }
     
     fn emit_future<Fu, E>(&self, future: Fu) 
@@ -50,56 +42,46 @@ impl<S: State> Emitter for TerminalAnchor<S> {
     Fu: 'static + Future<Output = E> + Send,
     E: 'static + Emitable + Sized,
     {
-        self.reporter().report_future(self.key(), future)
+        self.reporter.report_future(&self.key, future)
     }
 }
 
-pub struct TerminalNode<'n, S: State> {
-    state: Cow<'n, S>,
-    anchor: &'n S::Anchor,
-}
+impl<S> Node<S> for TerminalNode<S> 
+where S: State<Message = S> + DeserializeOwned {    
+    fn key(&self) -> &NodeKey { &self.key }
+    fn reporter(&self) -> &Reporter { &self.reporter }
 
-impl<S: State> TerminalNode<'_, S> {
-    pub fn apply_state(&mut self, state: S) {
-        *self.state.to_mut() = state;       
-    }
-}
+    fn new(
+        mut key: Vec<NodeId>,
+        id: Option<NodeId>,
+        reporter: &Reporter,
+    ) -> Self {
+        if let Some(id) = id { key.push(id); }
 
-impl<S: State> Deref for TerminalNode<'_, S> {
-    type Target = S;
-    fn deref(&self) -> &Self::Target { &self.state }
-}
-
-impl<S: State> Emitter for TerminalNode<'_, S> 
-where S::Anchor: Emitter {
-    fn emit<E: 'static + Emitable>(&self, emitable: E) { 
-        self.anchor.emit(emitable) 
-    }    
-
-    fn emit_future<Fu, E>(&self, future: Fu) 
-    where 
-    Fu: 'static + Future<Output = E> + Send,
-    E: 'static + Emitable + Sized,
-    {
-        self.anchor.emit_future(future) 
-    }
-}
-
-impl<'n, S: State> Node<'n, S> for TerminalNode<'n, S> 
-where 
-S::Anchor: Emitter,
-S: State<Message = S> + DeserializeOwned,
-{
-    fn new(state: &'n S, anchor: &'n S::Anchor) -> Self { 
-        Self { state: Cow::Borrowed(state), anchor } 
+        Self { 
+            key: key.into_boxed_slice(),   
+            reporter: reporter.clone(),
+            state: Arc::new(RwLock::new(S::default())),
+        }
     }
 
-    fn clone_state(&self) -> S { self.state.clone().into_owned() }
+    fn new_from(
+        node: &Self,
+        reporter: &Reporter,
+    ) -> Self {
+        Self { 
+            key: node.key.clone(),   
+            reporter: reporter.clone(),
+            state: node.state.clone(),
+        }
+    }
+
+    fn clone_state(&self) -> S { self.state.read().unwrap().clone() }
 
     fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()> {
         match packet.get_id(depth) {
             Some(_) => Err(packet.error(depth, "unknown id")),
-            None => Ok(*self.state.to_mut() = packet.read_state()),
+            None => Ok(*self.state.write().unwrap() = packet.read_state()),
         }        
     }
 
@@ -108,7 +90,7 @@ S: State<Message = S> + DeserializeOwned,
             Some(_) => Err(packet.error(depth, "unknown id")),
             None => {
                 let state: S = packet.read_state();    
-                *self.state.to_mut() = state.clone();                
+                *self.state.write().unwrap() = state.clone();                
                 Ok(state)
             },
         }        
@@ -135,9 +117,8 @@ macro_rules! impl_node_for {
             }
 
             impl frand_node::macro_prelude::State for $tys {
-                type Anchor = frand_node::macro_prelude::TerminalAnchor<Self>;
                 type Message = Self;
-                type Node<'n> = frand_node::macro_prelude::TerminalNode<'n, Self>;
+                type Node = frand_node::macro_prelude::TerminalNode<Self>;
 
                 fn apply(
                     &mut self, 

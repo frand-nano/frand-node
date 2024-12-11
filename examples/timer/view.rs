@@ -6,14 +6,14 @@ pub trait TimerView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl TimerView for TimerNode<'_> {
+impl TimerView for TimerNode {
     fn view(&self, ui: &mut Ui) {        
-        ui.label(format!("elapsed : {:.1}", *self.elapsed));
+        ui.label(format!("elapsed : {:.1}", *self.elapsed.v()));
 
-        let start_stop_text = if *self.enabled { "stop" } else { "start" };
+        let start_stop_text = if *self.enabled.v() { "stop" } else { "start" };
 
         if ui.button(start_stop_text).clicked() {
-            self.enabled.emit(!*self.enabled);
+            self.enabled.emit(!*self.enabled.v());
         }
 
         if ui.button("reset").clicked() {

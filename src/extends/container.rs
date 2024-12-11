@@ -5,8 +5,7 @@ use crossbeam::channel::{unbounded, Receiver, SendError, Sender};
 use crate::*;
 
 pub struct Container<S: State> {
-    state: S,
-    input_anchor: S::Anchor,
+    node: S::Node,
     input_tx: Sender<Packet>,
     input_rx: Receiver<Packet>,
     output_tx: Sender<Packet>,
@@ -14,15 +13,13 @@ pub struct Container<S: State> {
 }
 
 impl<S: State> Deref for Container<S> {
-    type Target = S;
-    fn deref(&self) -> &Self::Target { &self.state }
+    type Target = S::Node;
+    fn deref(&self) -> &Self::Target { &self.node }
 }
 
 impl<S: State> Container<S> {
+    pub fn node(&self) -> &S::Node { &self.node }
     pub fn input_tx(&self) -> &Sender<Packet> { &self.input_tx }
-    pub fn state(&self) -> &S { &self.state }
-    pub fn anchor(&self) -> &S::Anchor { &self.input_anchor }
-    pub fn new_node(&self) -> S::Node<'_> { self.state.with(&self.input_anchor) }
     pub fn output_tx(&self) -> &Sender<Packet> { &self.output_tx }
     pub fn take_output_rx(&mut self) -> Option<Receiver<Packet>> { self.output_rx.take() }
 
@@ -38,25 +35,20 @@ impl<S: State> Container<S> {
         };
 
         Self {
-            state: S::default(),
-            input_anchor: S::new_anchor(Reporter::new_callback(callback)),
+            node: S::new_node(Reporter::new_callback(callback)),
             input_tx, input_rx,
             output_tx,
             output_rx: Some(output_rx),
         }
     }
 
-    pub fn process<'n>(&'n mut self) -> Result<()> {
-        let mut node = self.state.with(&self.input_anchor);
-
-        while let Ok(packet) = self.input_rx.try_recv() {            
-            node.apply(0, &packet)?;
+    pub fn process(&mut self) -> Result<()> {
+        Ok(while let Ok(packet) = self.input_rx.try_recv() {            
+            self.node.apply(0, &packet)?;
 
             if self.output_rx.is_none() {
                 self.output_tx.send(packet)?;
             }
-        }        
-    
-        Ok(())
+        })        
     }
 }

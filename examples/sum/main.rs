@@ -10,12 +10,12 @@ mod view;
 mod test;
 
 struct App {
-    processor: Processor::<Sums>,
+    processor: Processor<Sums>,
 }
 
 impl App {
     fn new() -> Self {
-        Self { processor: Processor::new(
+        Self { processor: Processor::<Sums>::new(
             |result| if let Err(err) = result { log::info!("{err}") }, 
             |node, message| node.handle(message),
         ) }
@@ -24,10 +24,8 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        let node = self.processor.new_node();
-
         CentralPanel::default().show(ctx, |ui| {
-            node.view("sum", ui);
+            self.processor.view("sum", ui);
         });
 
         self.processor.process().unwrap();

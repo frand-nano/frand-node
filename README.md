@@ -19,22 +19,23 @@
 
 * [examples/sum](https://github.com/frand-nano/frand-node/blob/main/examples/sum)
 * [examples/timer](https://github.com/frand-nano/frand-node/blob/main/examples/timer)
+* [examples/async_sum](https://github.com/frand-nano/frand-node/blob/main/examples/async_sum)
 
 
 * `#[derive(Node)]`
 ```rust
 #[derive(Node)]
-struct Sums {
-    sum1: SumSub,
-    sum2: SumSub,
-    total: SumSub,
+pub struct Sums {
+    pub sum1: SumSub,
+    pub sum2: SumSub,
+    pub total: SumSub,
 }
 
 #[derive(Node)]
-struct SumSub {
-    a: i32,
-    b: i32,
-    sum: i32,
+pub struct SumSub {
+    pub a: i32,
+    pub b: i32,
+    pub sum: i32,
 }
 ```
 
@@ -67,7 +68,7 @@ impl SumsNode {
 impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_sum(&self) {
-        self.sum.emit(*self.a + *self.b)
+        self.sum.emit(*self.a.v() + *self.b.v())
     }
 }
 ```
@@ -79,33 +80,33 @@ let mut processor = Processor::<Sums>::new(
     // emit() 으로 발생한 이벤트 콜백
     |result| if let Err(err) = result { log::info!("{err}") }, 
     // Message 처리
-    Sums::update,
+    |node, message| node.handle(message),
 );
 ```
 
 * **Processor** 의 **Anchor** 에 새로운 값을 emit
 ```rust
-processor.anchor().sum1.a.emit(1);
-processor.anchor().sum1.b.emit(2);
-processor.anchor().sum2.a.emit(3);
-processor.anchor().sum2.b.emit(4);
+processor.sum1.a.emit(1);
+processor.sum1.b.emit(2);
+processor.sum2.a.emit(3);
+processor.sum2.b.emit(4);
 ```
 
 * process() 로 적용 후 테스트
 ```rust
 processor.process()?;
 
-assert_eq!(processor.sum1.a, 1, "sum1.a");
-assert_eq!(processor.sum1.b, 2, "sum1.b");
-assert_eq!(processor.sum1.sum, 1 + 2, "sum1.sum");
+assert_eq!(*processor.sum1.a.v(), 1, "sum1.a");
+assert_eq!(*processor.sum1.b.v(), 2, "sum1.b");
+assert_eq!(*processor.sum1.sum.v(), 1 + 2, "sum1.sum");
 
-assert_eq!(processor.sum2.a, 3, "sum2.a");
-assert_eq!(processor.sum2.b, 4, "sum2.b");
-assert_eq!(processor.sum2.sum, 3 + 4, "sum2.sum");
+assert_eq!(*processor.sum2.a.v(), 3, "sum2.a");
+assert_eq!(*processor.sum2.b.v(), 4, "sum2.b");
+assert_eq!(*processor.sum2.sum.v(), 3 + 4, "sum2.sum");
 
-assert_eq!(processor.total.a, 1 + 2, "total.a");
-assert_eq!(processor.total.b, 3 + 4, "total.b");
-assert_eq!(processor.total.sum, 1 + 2 + 3 + 4, "total.sum");
+assert_eq!(*processor.total.a.v(), 1 + 2, "total.a");
+assert_eq!(*processor.total.b.v(), 3 + 4, "total.b");
+assert_eq!(*processor.total.sum.v(), 1 + 2 + 3 + 4, "total.sum");
 ```
 
 
