@@ -9,17 +9,17 @@ pub struct Timer {
     pub reset: (),
 }
 
-impl Timer {
-    pub fn update(node: &TimerStateNode, message: TimerMessage) {
+impl TimerStateNode<'_> {
+    pub fn handle(&self, message: TimerMessage) {
         use TimerMessage::*;
 
         match message {
-            delta(d) if *node.enabled => {
-                node.elapsed.emit(*node.elapsed + d);
+            delta(d) if *self.enabled => {
+                self.elapsed.emit(*self.elapsed + d);
             },
             reset(_) => {
-                node.elapsed.emit(0f32);
-                node.enabled.emit(false);
+                self.elapsed.emit(0f32);
+                self.enabled.emit(false);
             },
             _ => (),
         }

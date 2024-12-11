@@ -17,9 +17,8 @@
 
 ## 예시 
 
-* [examples/sum](https://github.com/frand-nano/frand-node/blob/main/examples/sum/main.rs)
-* [examples/eframe_sum](https://github.com/frand-nano/frand-node/blob/main/examples/eframe_sum)
-* [examples/eframe_timer](https://github.com/frand-nano/frand-node/blob/main/examples/eframe_timer)
+* [examples/sum](https://github.com/frand-nano/frand-node/blob/main/examples/sum)
+* [examples/timer](https://github.com/frand-nano/frand-node/blob/main/examples/timer)
 
 
 * `#[derive(Node)]`
@@ -41,34 +40,34 @@ struct SumSub {
 
 * **Message** 처리 함수 작성
 ```rust
-impl SumSubStateNode<'_> {
-    // SumSub 의 a 와 b 의 합을 sum 에 emit()
-    fn emit_sum(&self) {
-        self.sum.emit(*self.a + *self.b)
-    }
-}
-```
-
-```rust
-impl Sum {
-    fn update(node: &SumStateNode<'_>, message: SumMessage) {
-        use SumMessage::*;
+impl SumsStateNode {
+    pub fn handle(&self, message: SumsMessage) {
+        use SumsMessage::*;
         use SumSubMessage::*;
 
         // Message 를 match 하여 이벤트 처리
         match message {
             // sum1 의 a 또는 b 가 emit 되면 sum1.sum 에 sum1.a + sum1.b 를 emit
             // sum1 의 sum 이 emit 되면 total.a 에 sum1.sum 을 emit
-            sum1(a(_) | b(_)) => node.sum1.emit_sum(),
-            sum1(sum(s)) => node.total.a.emit(s),
+            sum1(a(_) | b(_)) => self.sum1.emit_sum(),
+            sum1(sum(s)) => self.total.a.emit(s),
 
-            sum2(a(_) | b(_)) => node.sum2.emit_sum(),
-            sum2(sum(s)) => node.total.b.emit(s),
+            sum2(a(_) | b(_)) => self.sum2.emit_sum(),
+            sum2(sum(s)) => self.total.b.emit(s),
 
-            total(a(_) | b(_)) => node.total.emit_sum(),
+            total(a(_) | b(_)) => self.total.emit_sum(),
 
             _ => (),
         }
+    }
+}
+```
+
+```rust
+impl SumSubStateNode {
+    // SumSub 의 a 와 b 의 합을 sum 에 emit()
+    fn emit_sum(&self) {
+        self.sum.emit(*self.a + *self.b)
     }
 }
 ```
@@ -79,7 +78,7 @@ impl Sum {
 let mut processor = Processor::<Sums>::new(
     // emit() 으로 발생한 이벤트 콜백
     |result| if let Err(err) = result { log::info!("{err}") }, 
-    // Message 를 처리하기 위한 Sums::update 함수 연결
+    // Message 처리
     Sums::update,
 );
 ```

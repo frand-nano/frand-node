@@ -17,7 +17,7 @@ impl App {
     fn new(cc: &CreationContext) -> Self {
         let processor = Processor::<Timer>::new(
             |result| if let Err(err) = result { log::info!("{err}") }, 
-            Timer::update,
+            |node, message| node.handle(message),
         );
 
         let ctx = cc.egui_ctx.clone();

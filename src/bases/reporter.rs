@@ -9,7 +9,7 @@ pub enum Reporter {
 }
 
 impl std::fmt::Debug for Reporter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Reporter::Callback(_) => write!(f, "Reporter::Callback(Arc<dyn Fn(Packet) + Send + Sync>)"),
             Reporter::Sender(sender) => write!(f, "Reporter::Sender({:#?})", sender),
