@@ -115,13 +115,9 @@ macro_rules! impl_node_for {
 
                 fn apply(
                     &mut self,  
-                    depth: usize,
-                    packet: &frand_node::macro_prelude::Packet,
-                ) -> frand_node::macro_prelude::anyhow::Result<()> {
-                    match packet.get_id(depth) {
-                        Some(_) => Err(packet.error(depth, "unknown id")),
-                        None => Ok(*self = packet.read_state()),
-                    }
+                    message: Self::Message,
+                ) {
+                    *self = message;
                 }
             }
         )*      

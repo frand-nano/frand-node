@@ -11,6 +11,7 @@ pub struct Processor<S: State> {
     processed: HashSet<AnchorKey>,    
     input_rx: Receiver<Packet>,
     process_rx: Receiver<Packet>,
+    messages: Vec<S::Message>,
     update: fn(&S::Node<'_>, S::Message),
 }
 
@@ -22,7 +23,7 @@ impl<S: State> Deref for Processor<S> {
 impl<S: State> Processor<S> {
     pub fn state(&self) -> &S { &self.state }
     pub fn anchor(&self) -> &S::Anchor { &self.input_anchor }
-    pub fn node(&mut self) -> S::Node<'_> { self.state.with(&self.input_anchor) }
+    pub fn new_node(&self) -> S::Node<'_> { self.state.with(&self.input_anchor) }
 
     pub fn new<F>(
         callback: F,
@@ -42,6 +43,7 @@ impl<S: State> Processor<S> {
             processed: HashSet::new(),
             input_rx,
             process_rx,
+            messages: Vec::new(),
             update,
         }
     }
@@ -55,6 +57,7 @@ impl<S: State> Processor<S> {
                     self.processed.insert(packet.key().clone());
         
                     let message = node.apply_export(0, &packet)?;
+                    self.messages.push(message.clone());
         
                     (self.update)(&node, message);
                 }
@@ -66,6 +69,12 @@ impl<S: State> Processor<S> {
                 
             self.processed.clear(); 
         }        
+
+        drop(node);
+
+        for message in self.messages.drain(..) {
+            self.state.apply(message);
+        }
     
         Ok(())
     }

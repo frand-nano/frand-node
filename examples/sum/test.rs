@@ -15,12 +15,14 @@ fn sum() -> anyhow::Result<()> {
         |node, message| node.handle(message),
     );
 
-    processor.anchor().sum1.a.emit(1);
-    processor.anchor().sum1.b.emit(2);
-    processor.anchor().sum2.a.emit(3);
-    processor.anchor().sum2.b.emit(4);
-
-    processor.process()?;
+    for _ in 0..1 {
+        processor.anchor().sum1.a.emit(1);
+        processor.anchor().sum1.b.emit(2);
+        processor.anchor().sum2.a.emit(3);
+        processor.anchor().sum2.b.emit(4);
+    
+        processor.process()?;
+    }
 
     assert_eq!(processor.sum1.a, 1, "sum1.a");
     assert_eq!(processor.sum1.b, 2, "sum1.b");

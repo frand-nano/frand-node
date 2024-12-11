@@ -1,4 +1,3 @@
-use anyhow::Result;
 use super::*;
 
 pub trait State: 'static + Default + Clone + Emitable {
@@ -12,9 +11,9 @@ pub trait State: 'static + Default + Clone + Emitable {
         Self::Anchor::new(vec![], None, &reporter.into()) 
     }
 
-    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()>;    
+    fn apply(&mut self, message: Self::Message);    
 
-    fn with<'sn>(&'sn mut self, anchor: &'sn Self::Anchor) -> Self::Node<'sn> {
+    fn with<'sn>(&'sn self, anchor: &'sn Self::Anchor) -> Self::Node<'sn> {
         Self::Node::new(self, anchor)
     }
 }

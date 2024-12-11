@@ -76,13 +76,11 @@ pub fn expand(
 
             fn apply(
                 &mut self,  
-                depth: usize,
-                packet: &#mp::Packet,
-            ) -> #mp::anyhow::Result<()> {
-                match packet.get_id(depth) {
-                    #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
-                    Some(_) => Err(packet.error(depth, "unknown id")),
-                    None => Ok(*self = packet.read_state()),
+                message: #message_name,
+            ) {
+                match message {
+                    #(#message_name::#names(message) => self.#names.apply(message),)*
+                    #message_name::State(state) => *self = state,
                 }
             }
         }
