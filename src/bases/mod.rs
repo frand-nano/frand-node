@@ -1,16 +1,16 @@
 mod state;
-mod node;
+mod anchor;
 mod message;
-mod state_node;
+mod node;
 mod packet;
 mod reporter;
 mod emitter;
 
 pub use self::{
     state::*,
-    node::*,
+    anchor::*,
     message::*,
-    state_node::*,
+    node::*,
     packet::*,
     reporter::*,
     emitter::*,

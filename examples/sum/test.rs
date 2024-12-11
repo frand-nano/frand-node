@@ -15,10 +15,10 @@ fn sum() -> anyhow::Result<()> {
         |node, message| node.handle(message),
     );
 
-    processor.node().sum1.a.emit(1);
-    processor.node().sum1.b.emit(2);
-    processor.node().sum2.a.emit(3);
-    processor.node().sum2.b.emit(4);
+    processor.anchor().sum1.a.emit(1);
+    processor.anchor().sum1.b.emit(2);
+    processor.anchor().sum2.a.emit(3);
+    processor.anchor().sum2.b.emit(4);
 
     processor.process()?;
 

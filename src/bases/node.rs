@@ -1,12 +1,8 @@
-use super::{NodeId, NodeKey, Reporter};
+use anyhow::Result;
+use super::{Emitter, Packet, State};
 
-pub trait Node: 'static + Clone {
-    fn key(&self) -> &NodeKey;
-    fn reporter(&self) -> &Reporter;
-
-    fn new(
-        key: Vec<NodeId>,
-        id: Option<NodeId>,
-        reporter: &Reporter,
-    ) -> Self;
+pub trait Node<'sn, S: State>: Emitter<S> {    
+    fn new(state: &'sn S, anchor: &'sn S::Anchor) -> Self;
+    fn clone_state(&self) -> S;
+    fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<S::Message>;    
 }

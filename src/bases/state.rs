@@ -2,25 +2,25 @@ use anyhow::Result;
 use super::*;
 
 pub trait State: 'static + Default + Clone + Emitable {
-    type Node: Node;
+    type Anchor: Anchor;
     type Message: Message;
-    type StateNode<'sn>: StateNode<'sn, Self>;
+    type Node<'sn>: Node<'sn, Self>;
 
-    fn new_node<R: Into<Reporter>>(
+    fn new_anchor<R: Into<Reporter>>(
         reporter: R,
-    ) -> Self::Node { 
-        Self::Node::new(vec![], None, &reporter.into()) 
+    ) -> Self::Anchor { 
+        Self::Anchor::new(vec![], None, &reporter.into()) 
     }
 
     fn apply(&mut self, depth: usize, packet: &Packet) -> Result<()>;    
 
-    fn with<'sn>(&'sn mut self, node: &'sn Self::Node) -> Self::StateNode<'sn> {
-        Self::StateNode::new(self, node)
+    fn with<'sn>(&'sn mut self, anchor: &'sn Self::Anchor) -> Self::Node<'sn> {
+        Self::Node::new(self, anchor)
     }
 }
 
 impl<S: State> Emitable for S {
-    fn into_packet(self, node_key: NodeKey) -> Packet { 
-        Packet::new(node_key, self) 
+    fn into_packet(self, anchor_key: AnchorKey) -> Packet { 
+        Packet::new(anchor_key, self) 
     }
 }

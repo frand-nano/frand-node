@@ -3,11 +3,10 @@ use anyhow::{anyhow, Error};
 use serde::{Deserialize, Serialize};
 use super::{Emitable, State};
 
-pub type NodeId = u32;
-pub type NodeDepth = u32;
-pub type NodeKey = Box<[NodeId]>;
+pub type AnchorId = u32;
+pub type AnchorKey = Box<[AnchorId]>;
 
-pub type Header = NodeKey;
+pub type Header = AnchorKey;
 pub type Payload = Box<[u8]>;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -17,13 +16,13 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn key(&self) -> &NodeKey { &self.header }
+    pub fn key(&self) -> &AnchorKey { &self.header }
 
-    pub fn get_id(&self, depth: usize) -> Option<NodeId> { 
+    pub fn get_id(&self, depth: usize) -> Option<AnchorId> { 
         self.key().get(depth).copied()
     }
 
-    pub fn new<E: Emitable>(node_key: NodeKey, emitable: E) -> Self {
+    pub fn new<E: Emitable>(anchor_key: AnchorKey, emitable: E) -> Self {
         let mut buffer = Vec::new();
 
         ciborium::into_writer(&emitable, &mut buffer)
@@ -32,7 +31,7 @@ impl Packet {
         );
 
         Packet {
-            header: node_key,
+            header: anchor_key,
             payload: buffer.into_boxed_slice(),
         }      
     }

@@ -6,7 +6,7 @@ pub trait TimerView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl TimerView for TimerStateNode<'_> {
+impl TimerView for TimerNode<'_> {
     fn view(&self, ui: &mut Ui) {        
         ui.label(format!("elapsed : {:.1}", *self.elapsed));
 

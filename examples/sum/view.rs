@@ -3,7 +3,7 @@ use eframe::egui::Ui;
 use frand_node::*;
 use crate::sum::*;
 
-pub trait IncButton<'a, S: State>: StateNode<'a, S> 
+pub trait IncButton<'a, S: State>: Node<'a, S> 
 where S: Display + Add<i32, Output = S> {
     fn view(&self, ui: &mut Ui) {
         let value = self.clone_state();
@@ -14,13 +14,13 @@ where S: Display + Add<i32, Output = S> {
     }
 }
 
-impl<'a> IncButton<'a, i32> for <i32 as State>::StateNode<'a> {}
+impl<'a> IncButton<'a, i32> for <i32 as State>::Node<'a> {}
 
 pub trait SumSubView {
     fn view(&self, label: &str, ui: &mut Ui);
 }
 
-impl SumSubView for SumSubStateNode<'_> {
+impl SumSubView for SumSubNode<'_> {
     fn view(&self, label: &str, ui: &mut Ui) {        
         ui.horizontal(|ui| {
             ui.label(label);
@@ -36,7 +36,7 @@ pub trait SumView {
     fn view(&self, label: &str, ui: &mut Ui);
 }
 
-impl SumView for SumsStateNode<'_> {
+impl SumView for SumsNode<'_> {
     fn view(&self, label: &str, ui: &mut Ui) {
         ui.vertical(|ui| {
             self.sum1.view(&format!("{label}.sum1"), ui);

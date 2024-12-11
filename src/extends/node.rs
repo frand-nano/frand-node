@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::{marker::PhantomData, ops::{Deref, DerefMut}};
-use bases::{NodeId, NodeKey, Packet, Reporter, StateNode};
+use std::{borrow::Cow, marker::PhantomData, ops::Deref};
+use bases::{AnchorId, AnchorKey, Packet, Reporter, Node};
 use crate::*;
 
 mod frand_node {
@@ -10,23 +10,23 @@ mod frand_node {
 }
 
 #[derive(Debug, Clone)]
-pub struct TerminalNode<S: State> {
-    key: NodeKey,
+pub struct TerminalAnchor<S: State> {
+    key: AnchorKey,
     reporter: Reporter,
     _phantom: PhantomData<S>,
 }
 
-impl<S: State + Default> Default for TerminalNode<S> {
+impl<S: State + Default> Default for TerminalAnchor<S> {
     fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
 }
 
-impl<S: State> Node for TerminalNode<S> {
-    fn key(&self) -> &NodeKey { &self.key }
+impl<S: State> Anchor for TerminalAnchor<S> {
+    fn key(&self) -> &AnchorKey { &self.key }
     fn reporter(&self) -> &Reporter { &self.reporter }
 
     fn new(
-        mut key: Vec<NodeId>,
-        id: Option<NodeId>,
+        mut key: Vec<AnchorId>,
+        id: Option<AnchorId>,
         reporter: &Reporter,
     ) -> Self {
         if let Some(id) = id { key.push(id); }
@@ -39,52 +39,50 @@ impl<S: State> Node for TerminalNode<S> {
     }
 }
 
-impl<S: State> Emitter<S> for TerminalNode<S> {
+impl<S: State> Emitter<S> for TerminalAnchor<S> {
     fn emit(&self, state: S) {
         self.reporter().report(state.into_packet(self.key().clone()))
     }
 }
 
-pub struct TerminalStateNode<'sn, S: State> {
-    state: &'sn mut S,
-    node: &'sn S::Node,
+pub struct TerminalNode<'sn, S: State> {
+    state: Cow<'sn, S>,
+    anchor: &'sn S::Anchor,
 }
 
-impl<S: State> TerminalStateNode<'_, S> {
+impl<S: State> TerminalNode<'_, S> {
     pub fn apply_state(&mut self, state: S) {
-        *self.state = state;       
+        *self.state.to_mut() = state;       
     }
 }
 
-impl<S: State> Deref for TerminalStateNode<'_, S> {
+impl<S: State> Deref for TerminalNode<'_, S> {
     type Target = S;
-    fn deref(&self) -> &Self::Target { self.state }
+    fn deref(&self) -> &Self::Target { &self.state }
 }
 
-impl<S: State> DerefMut for TerminalStateNode<'_, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target { self.state }
+impl<S: State> Emitter<S> for TerminalNode<'_, S> 
+where S::Anchor: Emitter<S> {
+    fn emit(&self, state: S) { self.anchor.emit(state) }
 }
 
-impl<S: State> Emitter<S> for TerminalStateNode<'_, S> 
-where S::Node: Emitter<S> {
-    fn emit(&self, state: S) { self.node.emit(state) }
-}
-
-impl<'sn, S: State> StateNode<'sn, S> for TerminalStateNode<'sn, S> 
+impl<'sn, S: State> Node<'sn, S> for TerminalNode<'sn, S> 
 where 
-S::Node: Emitter<S>,
+S::Anchor: Emitter<S>,
 S: State<Message = S>,
 {
-    fn new(state: &'sn mut S, node: &'sn S::Node) -> Self { Self { state, node } }
+    fn new(state: &'sn S, anchor: &'sn S::Anchor) -> Self { 
+        Self { state: Cow::Borrowed(state), anchor } 
+    }
 
-    fn clone_state(&self) -> S { self.state.clone() }
+    fn clone_state(&self) -> S { self.state.clone().into_owned() }
 
     fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<S::Message> {
         match packet.get_id(depth) {
             Some(_) => Err(packet.error(depth, "unknown id")),
             None => {
                 let state: S = packet.read_state();    
-                *self.state = state.clone();                
+                *self.state.to_mut() = state.clone();                
                 Ok(state)
             },
         }        
@@ -111,9 +109,9 @@ macro_rules! impl_node_for {
             }
 
             impl frand_node::macro_prelude::State for $tys {
-                type Node = frand_node::macro_prelude::TerminalNode<Self>;
+                type Anchor = frand_node::macro_prelude::TerminalAnchor<Self>;
                 type Message = Self;
-                type StateNode<'sn> = frand_node::macro_prelude::TerminalStateNode<'sn, Self>;
+                type Node<'sn> = frand_node::macro_prelude::TerminalNode<'sn, Self>;
 
                 fn apply(
                     &mut self,  

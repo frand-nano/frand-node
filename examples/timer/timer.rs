@@ -9,7 +9,7 @@ pub struct Timer {
     pub reset: (),
 }
 
-impl TimerStateNode<'_> {
+impl TimerNode<'_> {
     pub fn handle(&self, message: TimerMessage) {
         use TimerMessage::*;
 

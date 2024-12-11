@@ -3,7 +3,7 @@ use syn::*;
 use quote::quote;
 use convert_case::{Case, Casing};
 
-pub type NodeId = u32;
+pub type AnchorId = u32;
 
 pub fn expand(
     state: &ItemStruct,
@@ -13,8 +13,8 @@ pub fn expand(
     let vis = &state.vis;
     let state_name = state.ident.clone();
 
-    let node_name = Ident::new(
-        &format!("{}Node", state.ident.to_string()).to_case(Case::Pascal), 
+    let anchor_name = Ident::new(
+        &format!("{}Anchor", state.ident.to_string()).to_case(Case::Pascal), 
         state.ident.span(),
     );
 
@@ -23,8 +23,8 @@ pub fn expand(
         state_name.span(),
     );
 
-    let state_node_name = Ident::new(
-        &format!("{}StateNode", state_name.to_string()).to_case(Case::Pascal), 
+    let node_name = Ident::new(
+        &format!("{}Node", state_name.to_string()).to_case(Case::Pascal), 
         state_name.span(),
     );
 
@@ -34,28 +34,28 @@ pub fn expand(
     };  
 
     let viss: Vec<_> = fields.iter().map(|field| &field.vis).collect();
-    let indexes: Vec<_> = (0..fields.len() as NodeId).into_iter().collect();
+    let indexes: Vec<_> = (0..fields.len() as AnchorId).into_iter().collect();
     let names: Vec<_> = fields.iter().filter_map(|field| field.ident.as_ref()).collect();
     let tys: Vec<_> = fields.iter().map(|field| &field.ty).collect();
 
-    let node_tys: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <#ty as #mp::State>::Node }
+    let anchor_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #mp::State>::Anchor }
     ).collect();
 
     let message_tys: Vec<_> = tys.iter().map(|ty| 
         quote!{ <#ty as #mp::State>::Message }
     ).collect();
 
-    let state_node_tys: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <#ty as #mp::State>::StateNode }
+    let node_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #mp::State>::Node }
     ).collect();
 
     Ok(quote!{
         #[derive(Debug, Clone)]
-        #vis struct #node_name {
-            key: #mp::NodeKey,
+        #vis struct #anchor_name {
+            key: #mp::AnchorKey,
             reporter: #mp::Reporter,
-            #(#viss #names: #node_tys,)*
+            #(#viss #names: #anchor_tys,)*
         }
 
         #[derive(Debug, Clone)]
@@ -64,15 +64,15 @@ pub fn expand(
             #[allow(non_camel_case_types)] State(#[allow(dead_code)] #state_name),
         }
 
-        #vis struct #state_node_name<'sn> {
-            node: &'sn #node_name,
-            #(#viss #names: #state_node_tys<'sn>,)*
+        #vis struct #node_name<'sn> {
+            anchor: &'sn #anchor_name,
+            #(#viss #names: #node_tys<'sn>,)*
         }
 
         impl #mp::State for #state_name {
-            type Node = #node_name;
+            type Anchor = #anchor_name;
             type Message = #message_name;
-            type StateNode<'sn> = #state_node_name<'sn>;
+            type Node<'sn> = #node_name<'sn>;
 
             fn apply(
                 &mut self,  
@@ -87,30 +87,30 @@ pub fn expand(
             }
         }
 
-        impl #mp::Node for #node_name {
-            fn key(&self) -> &#mp::NodeKey { &self.key }
+        impl #mp::Anchor for #anchor_name {
+            fn key(&self) -> &#mp::AnchorKey { &self.key }
             fn reporter(&self) -> &#mp::Reporter { &self.reporter }
         
             fn new(
-                mut key: Vec<#mp::NodeId>,
-                id: Option<#mp::NodeId>,
+                mut key: Vec<#mp::AnchorId>,
+                id: Option<#mp::AnchorId>,
                 reporter: &#mp::Reporter,
             ) -> Self {
                 if let Some(id) = id { key.push(id); }
         
                 Self { 
-                    #(#names: #node_tys::new(key.clone(), Some(#indexes), reporter),)*   
+                    #(#names: #anchor_tys::new(key.clone(), Some(#indexes), reporter),)*   
                     key: key.into_boxed_slice(),      
                     reporter: reporter.clone(),
                 }
             }
         }
 
-        impl Default for #node_name {
+        impl Default for #anchor_name {
             fn default() -> Self { Self::new(vec![], None, &(|_|()).into()) }
         }
 
-        impl #mp::Emitter<#state_name> for #node_name {
+        impl #mp::Emitter<#state_name> for #anchor_name {
             fn emit(&self, state: #state_name) {
                 self.reporter().report(state.into_packet(self.key().clone()))
             }
@@ -128,15 +128,15 @@ pub fn expand(
             }
         }
                 
-        impl #mp::Emitter<#state_name> for #state_node_name<'_> {
-            fn emit(&self, state: #state_name) { self.node.emit(state) }
+        impl #mp::Emitter<#state_name> for #node_name<'_> {
+            fn emit(&self, state: #state_name) { self.anchor.emit(state) }
         }
 
-        impl<'sn> #mp::StateNode<'sn, #state_name> for #state_node_name<'sn> {
-            fn new(state: &'sn mut #state_name, node: &'sn #node_name) -> Self { 
+        impl<'sn> #mp::Node<'sn, #state_name> for #node_name<'sn> {
+            fn new(state: &'sn #state_name, anchor: &'sn #anchor_name) -> Self { 
                 Self { 
-                    node, 
-                    #(#names: #state_node_tys::new(&mut state.#names, &node.#names),)*   
+                    anchor, 
+                    #(#names: #node_tys::new(&state.#names, &anchor.#names),)*   
                 } 
             } 
 
@@ -165,7 +165,7 @@ pub fn expand(
             }
         }
 
-        impl #state_node_name<'_> {
+        impl #node_name<'_> {
             pub fn apply_state(&mut self, state: #state_name) {
                 #(self.#names.apply_state(state.#names);)*       
             }
