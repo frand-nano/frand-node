@@ -61,7 +61,7 @@ impl<S: State> Processor<S> {
                 if !self.processed.contains(packet.key()) {
                     self.processed.insert(packet.key().clone());
         
-                    let message = self.node.apply_export(0, &packet)?;
+                    let message = self.process_node.apply_export(0, &packet)?;
 
                     if self.output_rx.is_none() {
                         self.output_tx.send(packet)?;

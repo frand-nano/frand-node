@@ -39,6 +39,7 @@ pub trait SumView {
 impl SumView for SumsNode {
     fn view(&self, label: &str, ui: &mut Ui) {
         ui.vertical(|ui| {
+            ui.label("A 1-second delay is applied to all addition");
             self.sum1.view(&format!("{label}.sum1"), ui);
             self.sum2.view(&format!("{label}.sum2"), ui);
             self.total.view(&format!("{label}.total"), ui);
