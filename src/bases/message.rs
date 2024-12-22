@@ -1,6 +1,5 @@
-use anyhow::Result;
-use super::Packet;
+use super::*;
 
 pub trait Message: Clone + Sized + Send + Sync {
-    fn from_packet(depth: usize, packet: &Packet) -> Result<Self>;    
+    fn from_packet(depth: usize, packet: &Packet) -> Result<Self, PacketError>;    
 }

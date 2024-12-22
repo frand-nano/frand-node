@@ -1,6 +1,6 @@
 # FrandNode
 
-* Rust 의 Derive Macro 와 Trait 을 활용하여 async Event Message 를 다루는 도구들을 제공합니다.
+* Rust 의 Derive Macro 와 Trait 을 활용하여 Async Event Message 를 다루는 도구들을 제공합니다.
 * **Node** 를 clone() 하여 MultiThread 환경이나 ViewModel 에서 Callback 을 활용하거나
 * **Packet** 으로 메시지 처리 파이프라인을 만들거나 Server와 Client 의 상태를 동기화하는 작업 등에 활용할 수 있습니다.
 
@@ -12,7 +12,7 @@
 * **Node**: 데이터 변경에 대한 Event 를 Callback 할 수 있는 계층 구조를 제공합니다.
 * **Packet**: `[u8]` 로 Serialize, Deserialize 될 수 있는 구조체입니다. **Node** 로부터 생성되며 **Message** 로 변환되거나 **State** 에 값을 적용하는 용도로 사용할 수 있습니다.
 
-
+* **Consensus**: **Node** 의 생성과 **State**, **Packet** 의 적용을 담당합니다. 
 * **Container**: callback을 지정하여 input, output channel 과 **Node** 를 연계합니다.
 * **Processor**: **Container** 에 더하여 **Message** 를 match 하여 Event 를 연쇄 적용합니다. 하나의 **Packet** 으로부터 하나 이상의 **Packet** 을 생성하고 **State** 에 적용하는 방식으로 동작합니다.
 * **AsyncProcessor**: **Processor** 에 더하여 **Node** 에 emit 된 future 들을 비동기적으로 동시 처리합니다.
@@ -20,8 +20,10 @@
 ## 예시 
 
 * [examples/sum](https://github.com/frand-nano/frand-node/blob/main/examples/sum)
-* [examples/timer](https://github.com/frand-nano/frand-node/blob/main/examples/timer)
+* [examples/stopwatch](https://github.com/frand-nano/frand-node/blob/main/examples/stopwatch)
 * [examples/async_sum](https://github.com/frand-nano/frand-node/blob/main/examples/async_sum)
+* [examples/option](https://github.com/frand-nano/frand-node/blob/main/examples/option)
+* [examples/vec](https://github.com/frand-nano/frand-node/blob/main/examples/vec)
 
 
 * `#[derive(Node)]`
@@ -70,7 +72,7 @@ impl SumsNode {
 impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_sum(&self) {
-        self.sum.emit(*self.a.v() + *self.b.v())
+        self.sum.emit(self.a.v() + self.b.v())
     }
 }
 ```
@@ -80,13 +82,13 @@ impl SumSubNode {
 // Sums 를 다루는 Processor 를 생성
 let mut processor = Processor::<Sums>::new(
     // emit() 으로 발생한 이벤트 콜백
-    |result| if let Err(err) = result { log::info!("{err}") }, 
+    |result| if let Err(err) = result { log::error!("{err}") }, 
     // Message 처리
     |node, message| node.handle(message),
 );
 ```
 
-* **Processor** 의 **Anchor** 에 새로운 값을 emit
+* **Processor** 의 **Node** 에 새로운 값을 emit
 ```rust
 processor.sum1.a.emit(1);
 processor.sum1.b.emit(2);
@@ -98,17 +100,17 @@ processor.sum2.b.emit(4);
 ```rust
 processor.process()?;
 
-assert_eq!(*processor.sum1.a.v(), 1, "sum1.a");
-assert_eq!(*processor.sum1.b.v(), 2, "sum1.b");
-assert_eq!(*processor.sum1.sum.v(), 1 + 2, "sum1.sum");
+assert_eq!(processor.sum1.a.v(), 1, "sum1.a");
+assert_eq!(processor.sum1.b.v(), 2, "sum1.b");
+assert_eq!(processor.sum1.sum.v(), 1 + 2, "sum1.sum");
 
-assert_eq!(*processor.sum2.a.v(), 3, "sum2.a");
-assert_eq!(*processor.sum2.b.v(), 4, "sum2.b");
-assert_eq!(*processor.sum2.sum.v(), 3 + 4, "sum2.sum");
+assert_eq!(processor.sum2.a.v(), 3, "sum2.a");
+assert_eq!(processor.sum2.b.v(), 4, "sum2.b");
+assert_eq!(processor.sum2.sum.v(), 3 + 4, "sum2.sum");
 
-assert_eq!(*processor.total.a.v(), 1 + 2, "total.a");
-assert_eq!(*processor.total.b.v(), 3 + 4, "total.b");
-assert_eq!(*processor.total.sum.v(), 1 + 2 + 3 + 4, "total.sum");
+assert_eq!(processor.total.a.v(), 1 + 2, "total.a");
+assert_eq!(processor.total.b.v(), 3 + 4, "total.b");
+assert_eq!(processor.total.sum.v(), 1 + 2 + 3 + 4, "total.sum");
 ```
 
 

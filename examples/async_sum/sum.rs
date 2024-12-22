@@ -42,8 +42,8 @@ impl SumsNode {
 impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_expensive_sum(&self) {
-        let a = *self.a.v();
-        let b = *self.b.v();
+        let a = self.a.v();
+        let b = self.b.v();
 
         self.sum.emit_future(async move { 
             sleep(Duration::from_millis(1000)).await;

@@ -1,11 +1,12 @@
-use anyhow::Result;
 use std::ops::Deref;
-use bases::{Packet, Reporter};
+
+use bases::{Packet, Reporter, Result};
 use crossbeam::channel::{unbounded, Receiver, SendError, Sender};
 use crate::*;
 
 pub struct Container<S: State> {
     node: S::Node,
+    consensus: S::Consensus,
     input_tx: Sender<Packet>,
     input_rx: Receiver<Packet>,
     output_tx: Sender<Packet>,
@@ -34,8 +35,11 @@ impl<S: State> Container<S> {
             callback(input_tx_clone.send(packet))
         };
 
+        let consensus = S::Consensus::default();
+
         Self {
-            node: S::new_node(Reporter::new_callback(callback)),
+            node: consensus.new_node(&Reporter::new_callback(callback)),
+            consensus,
             input_tx, input_rx,
             output_tx,
             output_rx: Some(output_rx),
@@ -43,11 +47,11 @@ impl<S: State> Container<S> {
     }
 
     pub fn process(&mut self) -> Result<()> {
-        Ok(while let Ok(packet) = self.input_rx.try_recv() {            
-            self.node.apply(0, &packet)?;
+        Ok(while let Ok(packet) = self.input_rx.try_recv() {    
+            self.consensus.apply(0, &packet)?;
 
             if self.output_rx.is_none() {
-                self.output_tx.send(packet)?;
+                self.output_tx.send(packet)?; 
             }
         })        
     }

@@ -14,8 +14,7 @@ pub mod prelude {
     
     pub use crate::{
         bases::{
-            State, Message, Node, Emitter, Emitable,   
-            Packet,
+            State, Message, Consensus, Node, Emitter, Emitable,  
         },
         extends::{
             Container, Processor, AsyncProcessor,
@@ -26,17 +25,14 @@ pub mod prelude {
 pub mod macro_prelude {
     pub use crate::prelude::*;
 
-    /// This module re-exports functionality from the `anyhow` crate.
-    pub mod anyhow {
-        /// Re-exported from the `anyhow` crate.
-        pub use anyhow::Result;
-    }
-
     pub use crate::{
         bases::{
-            Header, NodeKey, NodeId, 
-            Reporter,
+            Result, Header, NodeKey, NodeId, 
+            Reporter, 
+            Packet, PacketError,
         },
-        extends::TerminalNode,
+        extends::{
+            TerminalConsensus, TerminalNode,
+        },
     };
 }

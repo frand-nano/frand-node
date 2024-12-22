@@ -18,6 +18,11 @@ pub fn expand(
         state_name.span(),
     );
 
+    let consensus_name = Ident::new(
+        &format!("{}Consensus", state_name.to_string()).to_case(Case::Pascal), 
+        state_name.span(),
+    );
+
     let node_name = Ident::new(
         &format!("{}Node", state_name.to_string()).to_case(Case::Pascal), 
         state_name.span(),
@@ -37,6 +42,10 @@ pub fn expand(
         quote!{ <#ty as #mp::State>::Message }
     ).collect();
 
+    let consensus_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #mp::State>::Consensus }
+    ).collect();
+
     let node_tys: Vec<_> = tys.iter().map(|ty| 
         quote!{ <#ty as #mp::State>::Node }
     ).collect();
@@ -49,6 +58,12 @@ pub fn expand(
         }
 
         #[derive(Debug, Clone)]
+        #vis struct #consensus_name {
+            key: #mp::NodeKey,
+            #(#viss #names: #consensus_tys,)*
+        }
+
+        #[derive(Debug, Clone)]
         #vis struct #node_name {
             key: #mp::NodeKey,
             reporter: #mp::Reporter,
@@ -57,13 +72,14 @@ pub fn expand(
 
         impl #mp::State for #state_name {
             type Message = #message_name;
+            type Consensus = #consensus_name;
             type Node = #node_name;
 
             fn apply(
                 &mut self, 
                 depth: usize, 
                 packet: #mp::Packet,
-            ) -> #mp::anyhow::Result<()> {
+            ) -> core::result::Result<(), #mp::PacketError> {
                 match packet.get_id(depth) {
                     #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
                     Some(_) => Err(packet.error(depth, "unknown id")),
@@ -73,21 +89,17 @@ pub fn expand(
 
             fn apply_message(
                 &mut self,  
-                message: #message_name,
+                message: Self::Message,
             ) {
                 match message {
-                    #(#message_name::#names(message) => self.#names.apply_message(message),)*
-                    #message_name::State(state) => *self = state,
+                    #(Self::Message::#names(message) => self.#names.apply_message(message),)*
+                    Self::Message::State(state) => *self = state,
                 }
             }
         }
 
-        impl Default for #node_name {
-            fn default() -> Self { Self::new(vec![], None, &#mp::Reporter::None) }
-        }
-
         impl #mp::Message for #message_name {
-            fn from_packet(depth: usize, packet: &#mp::Packet) -> #mp::anyhow::Result<Self> {
+            fn from_packet(depth: usize, packet: &#mp::Packet) -> core::result::Result<Self, #mp::PacketError> {
                 Ok(match packet.get_id(depth) {
                     #(Some(#indexes) => Ok(
                         #message_name::#names(#message_tys::from_packet(depth + 1, packet)?)
@@ -97,50 +109,28 @@ pub fn expand(
                 }?)     
             }
         }
-                
-        impl #mp::Emitter for #node_name {
-            fn emit<E: 'static + #mp::Emitable>(&self, emitable: E) { 
-                self.reporter.report(&self.key, emitable)
-            }    
-        
-            fn emit_future<Fu, E>(&self, future: Fu) 
-            where 
-            Fu: 'static + std::future::Future<Output = E> + Send,
-            E: 'static + #mp::Emitable + Sized,
-            {
-                self.reporter.report_future(&self.key, future)
-            }
+
+        impl Default for #consensus_name {      
+            fn default() -> Self { Self::new(vec![], None) }
         }
 
-        impl #mp::Node<#state_name> for #node_name {
-            fn key(&self) -> &#mp::NodeKey { &self.key }
-            fn reporter(&self) -> &#mp::Reporter { &self.reporter }
-        
+        impl #mp::Consensus<#state_name> for #consensus_name {  
             fn new(
                 mut key: Vec<#mp::NodeId>,
                 id: Option<#mp::NodeId>,
-                reporter: &#mp::Reporter,
             ) -> Self {
                 if let Some(id) = id { key.push(id); }
-        
+                
                 Self { 
-                    #(#names: #node_tys::new(key.clone(), Some(#indexes), reporter),)*   
-                    key: key.into_boxed_slice(),      
-                    reporter: reporter.clone(),
+                    key: key.clone().into_boxed_slice(),   
+                    #(#names: #mp::Consensus::new(key.clone(), Some(#indexes)),)*                     
                 }
             }
-
-            fn new_from(
-                node: &Self,
-                reporter: &#mp::Reporter,
-            ) -> Self {
-                Self { 
-                    #(#names: #node_tys::new_from(&node.#names, reporter),)*  
-                    key: node.key.clone(),   
-                    reporter: reporter.clone(),
-                }
+    
+            fn new_node(&self, reporter: &#mp::Reporter) -> #node_name {
+                #node_name::new_from(self, reporter)
             }
-
+            
             fn clone_state(&self) -> #state_name { 
                 #state_name {
                     #(#names: self.#names.clone_state(),)*   
@@ -151,19 +141,23 @@ pub fn expand(
                 &mut self, 
                 depth: usize, 
                 packet: &#mp::Packet,
-            ) -> #mp::anyhow::Result<()> {
+            ) -> core::result::Result<(), #mp::PacketError> {
                 match packet.get_id(depth) {
                     #(Some(#indexes) => self.#names.apply(depth+1, packet),)*
                     Some(_) => Err(packet.error(depth, "unknown id")),
                     None => Ok(self.apply_state(packet.read_state())),
                 } 
             }
+
+            fn apply_state(&mut self, state: #state_name) {
+                #(self.#names.apply_state(state.#names);)*       
+            }
             
             fn apply_export(
                 &mut self, 
                 depth: usize, 
                 packet: &#mp::Packet,
-            ) -> #mp::anyhow::Result<#message_name> {
+            ) -> core::result::Result<#message_name, #mp::PacketError> {
                 match packet.get_id(depth) {
                     #(Some(#indexes) => {
                         Ok(#message_name::#names(self.#names.apply_export(depth+1, packet)?))
@@ -178,9 +172,33 @@ pub fn expand(
             }
         }
 
-        impl #node_name {
-            pub fn apply_state(&mut self, state: #state_name) {
-                #(self.#names.apply_state(state.#names);)*       
+        impl #mp::Node<#state_name> for #node_name {
+            fn new_from(
+                consensus: &#consensus_name,
+                reporter: &#mp::Reporter,
+            ) -> Self {
+                Self { 
+                    key: consensus.key.clone(),
+                    reporter: reporter.clone(),
+                    #(#names: #mp::Node::new_from(&consensus.#names, reporter),)*  
+                }
+            }
+
+            fn clone_state(&self) -> #state_name { 
+                #state_name {
+                    #(#names: self.#names.clone_state(),)*   
+                }
+            }
+        }
+
+        impl #mp::Emitter<#state_name> for #node_name {  
+            fn emit(&self, state: #state_name) {
+                self.reporter.report(&self.key, state)
+            }
+
+            fn emit_future<Fu>(&self, future: Fu) 
+            where Fu: 'static + std::future::Future<Output = #state_name> + Send {
+                self.reporter.report_future(&self.key, future)
             }
         }
     })

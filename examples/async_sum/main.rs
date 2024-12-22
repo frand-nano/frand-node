@@ -1,11 +1,11 @@
-use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame};
+use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame, NativeOptions};
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use tokio::runtime::Runtime;
 use frand_node::*;
 use sum::*;
 use view::*;
 
+mod inc_button;
 mod sum;
 mod view;
 
@@ -14,17 +14,18 @@ struct App {
 }
 
 impl App {
-    fn new(runtime: &Runtime, cc: &CreationContext) -> Self {
+    fn new(cc: &CreationContext) -> Self {
         let mut processor = AsyncProcessor::<Sums>::new(
-            |result| if let Err(err) = result { log::info!("{err}") }, 
+            |result| if let Err(err) = result { log::error!("{err}") }, 
             |node, message| node.handle(message),
         );
 
         let node = processor.node().clone();
 
         let ctx = cc.egui_ctx.clone();
-        runtime.spawn(async move {
+        tokio::spawn(async move {
             let mut processor_output_rx = processor.take_output_rx().unwrap();
+
             processor.start().await;
             
             while let Some(_) = processor_output_rx.recv().await {
@@ -44,15 +45,14 @@ impl eframe::App for App {
     }
 }
 
-fn main() -> eframe::Result<()> {
-    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+#[tokio::main]
+async fn main() -> eframe::Result<()> {
+    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
+    .unwrap_or_else(|err| log::warn!("{err}"));
 
-    let runtime = Runtime::new().unwrap();
-    let options = eframe::NativeOptions::default();
-    
     eframe::run_native(
         "AsyncSum",
-        options,
-        Box::new(|cc| Ok(Box::new(App::new(&runtime, cc)))),
+        NativeOptions::default(),
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
 }

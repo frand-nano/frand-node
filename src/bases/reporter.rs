@@ -2,7 +2,7 @@ use std::{future::Future, sync::Arc};
 use crossbeam::channel::Sender;
 use futures::{future::BoxFuture, FutureExt};
 use crate::bases::Packet;
-use super::{NodeKey, Emitable};
+use super::*;
 
 pub type EmitableFuture = (NodeKey, BoxFuture<'static, Box<dyn Emitable>>);
 
@@ -48,28 +48,30 @@ impl Reporter {
 
     pub fn report<E: 'static + Emitable>(
         &self, 
-        anchor_key: &NodeKey, 
+        node_key: &NodeKey, 
         emitable: E,
     ) {
         match self {
             Reporter::Callback(callback) => { 
-                callback(emitable.into_packet(anchor_key)); 
+                callback(emitable.into_packet(node_key)); 
             },
             Reporter::Sender(sender) => { 
-                sender.send(emitable.into_packet(anchor_key)).ok(); 
+                sender.send(emitable.into_packet(node_key)).ok(); 
             },
             Reporter::FutureCallback(callback) => { 
-                callback((anchor_key.to_owned(), async { 
+                callback((node_key.to_owned(), async { 
                     Box::new(emitable) as Box<dyn Emitable> 
                 }.boxed())); 
             },
-            Reporter::None => {},
+            Reporter::None => {
+                
+            },
         }
     }
 
     pub fn report_future<Fu, E>(
         &self, 
-        anchor_key: &NodeKey, 
+        node_key: &NodeKey, 
         future: Fu,
     ) 
     where 
@@ -80,7 +82,7 @@ impl Reporter {
             Reporter::Callback(_) => { unimplemented!(); },
             Reporter::Sender(_) => { unimplemented!(); },
             Reporter::FutureCallback(callback) => { 
-                callback((anchor_key.to_owned(), async {
+                callback((node_key.to_owned(), async {
                     Box::new(future.await) as Box<dyn Emitable>
                 }.boxed())); 
             },

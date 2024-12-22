@@ -1,20 +1,5 @@
-use std::{fmt::Display, ops::Add};
 use eframe::egui::Ui;
-use frand_node::*;
-use crate::sum::*;
-
-pub trait IncButton<S: State>: Node<S> 
-where S: Display + Add<i32, Output = S> {
-    fn view(&self, ui: &mut Ui) {
-        let value = self.clone_state();
-
-        if ui.button(format!(" {value} ")).clicked() {
-            self.emit(value + 1);
-        }
-    }
-}
-
-impl IncButton<i32> for <i32 as State>::Node {}
+use crate::{inc_button::IncButton, sum::*};
 
 pub trait SumSubView {
     fn view(&self, label: &str, ui: &mut Ui);
@@ -27,7 +12,7 @@ impl SumSubView for SumSubNode {
             self.a.view(ui);
             ui.label(" + ");
             self.b.view(ui);
-            ui.label(format!(" : {}", *self.sum.v()));
+            ui.label(format!(" : {}", self.sum.v()));
         });
     }
 }

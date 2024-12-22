@@ -40,6 +40,6 @@ impl SumsNode {
 impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_sum(&self) {
-        self.sum.emit(*self.a.v() + *self.b.v())
+        self.sum.emit(self.a.v() + self.b.v())
     }
 }

@@ -1,7 +1,6 @@
-use std::io::Cursor;
-use anyhow::{anyhow, Error};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use super::{Emitable, State};
+use std::{fmt::Debug, io::Cursor};
+use serde::{Deserialize, Serialize};
+use super::*;
 
 pub type NodeId = u32;
 pub type NodeKey = Box<[NodeId]>;
@@ -23,7 +22,7 @@ impl Packet {
     }
 
     pub fn new<E: Emitable + Serialize>(
-        anchor_key: &NodeKey, 
+        node_key: &NodeKey, 
         emitable: E,
     ) -> Self {
         let mut buffer = Vec::new();
@@ -34,12 +33,12 @@ impl Packet {
         );
 
         Packet {
-            header: anchor_key.to_owned(),
+            header: node_key.to_owned(),
             payload: buffer.into_boxed_slice(),
         }      
     }
 
-    pub fn read_state<S: State + DeserializeOwned>(&self) -> S {
+    pub fn read_state<S: State>(&self) -> S {
         ciborium::from_reader(Cursor::new(&self.payload))
         .unwrap_or_else(|err| 
             panic!("deserialize CBOR with {:#?} -> Err({err})", self.payload)
@@ -50,7 +49,7 @@ impl Packet {
         &self, 
         depth: usize,
         message: impl AsRef<str>,
-    ) -> Error {
-        anyhow!("{} depth:{depth} packet:{:#?}", message.as_ref(), self)
+    ) -> PacketError {
+        PacketError::new(self.clone(), depth, message)
     }
 }

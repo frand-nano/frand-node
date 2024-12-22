@@ -2,23 +2,19 @@ use eframe::{egui::{CentralPanel, Context}, Frame, NativeOptions};
 use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use sum::*;
 use view::*;
 
 mod inc_button;
-mod sum;
 mod view;
-mod test;
 
 struct App {
-    processor: Processor<Sums>,
+    container: Container<Vec<i32>>,
 }
 
 impl App {
     fn new() -> Self {
-        Self { processor: Processor::<Sums>::new(
+        Self { container: Container::<Vec<i32>>::new(
             |result| if let Err(err) = result { log::error!("{err}") }, 
-            |node, message| node.handle(message),
         ) }
     }
 }
@@ -26,10 +22,10 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         CentralPanel::default().show(ctx, |ui| {
-            self.processor.view("sum", ui);
+            self.container.view(ui);
         });
 
-        self.processor.process().unwrap();
+        self.container.process().unwrap();
     }
 }
 
@@ -38,7 +34,7 @@ fn main() -> eframe::Result<()> {
     .unwrap_or_else(|err| log::warn!("{err}"));
     
     eframe::run_native(
-        "Sum",
+        "Vec",
         NativeOptions::default(),
         Box::new(|_cc| Ok(Box::new(App::new()))),
     )

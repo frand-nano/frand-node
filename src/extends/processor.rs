@@ -1,11 +1,11 @@
-use anyhow::Result;
 use std::{collections::HashSet, ops::Deref};
-use bases::{NodeKey, Packet, Reporter};
+use bases::{NodeKey, Packet, Reporter, Result};
 use crossbeam::channel::{unbounded, Receiver, SendError, Sender};
 use crate::*;
 
 pub struct Processor<S: State> {
     node: S::Node,
+    consensus: S::Consensus,
     process_node: S::Node,
     processed: HashSet<NodeKey>,    
     input_tx: Sender<Packet>,
@@ -41,11 +41,12 @@ impl<S: State> Processor<S> {
             callback(input_tx_clone.send(packet))
         };
 
-        let node = S::new_node(Reporter::new_callback(callback));
+        let consensus = S::Consensus::default();
 
         Self {
-            process_node: S::new_node_from(&node, Reporter::new_sender(process_tx)),
-            node,
+            node: consensus.new_node(&Reporter::new_callback(callback)),
+            process_node: consensus.new_node(&Reporter::new_sender(process_tx)),
+            consensus,
             processed: HashSet::new(),
             input_tx, input_rx,
             process_rx,
@@ -61,7 +62,7 @@ impl<S: State> Processor<S> {
                 if !self.processed.contains(packet.key()) {
                     self.processed.insert(packet.key().clone());
         
-                    let message = self.process_node.apply_export(0, &packet)?;
+                    let message = self.consensus.apply_export(0, &packet)?;
 
                     if self.output_rx.is_none() {
                         self.output_tx.send(packet)?;

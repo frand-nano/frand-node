@@ -40,7 +40,7 @@ impl SumsNode {
 impl SumSubNode {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_sum(&self) {
-        self.sum.emit(*self.a.v() + *self.b.v())
+        self.sum.emit(self.a.v() + self.b.v())
     }
 }
 
@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
     // Sums 를 다루는 Processor 를 생성
     let mut processor = Processor::<Sums>::new(
         // emit() 으로 발생한 이벤트 콜백
-        |result| if let Err(err) = result { log::info!("{err}") }, 
+        |result| if let Err(err) = result { log::error!("{err}") }, 
         // Message 처리
         |node, message| node.handle(message),
     );
@@ -64,17 +64,17 @@ fn main() -> anyhow::Result<()> {
         processor.process()?;
     }
 
-    assert_eq!(*processor.sum1.a.v(), 1, "sum1.a");
-    assert_eq!(*processor.sum1.b.v(), 2, "sum1.b");
-    assert_eq!(*processor.sum1.sum.v(), 1 + 2, "sum1.sum");
+    assert_eq!(processor.sum1.a.v(), 1, "sum1.a");
+    assert_eq!(processor.sum1.b.v(), 2, "sum1.b");
+    assert_eq!(processor.sum1.sum.v(), 1 + 2, "sum1.sum");
 
-    assert_eq!(*processor.sum2.a.v(), 3, "sum2.a");
-    assert_eq!(*processor.sum2.b.v(), 4, "sum2.b");
-    assert_eq!(*processor.sum2.sum.v(), 3 + 4, "sum2.sum");
+    assert_eq!(processor.sum2.a.v(), 3, "sum2.a");
+    assert_eq!(processor.sum2.b.v(), 4, "sum2.b");
+    assert_eq!(processor.sum2.sum.v(), 3 + 4, "sum2.sum");
 
-    assert_eq!(*processor.total.a.v(), 1 + 2, "total.a");
-    assert_eq!(*processor.total.b.v(), 3 + 4, "total.b");
-    assert_eq!(*processor.total.sum.v(), 1 + 2 + 3 + 4, "total.sum");
+    assert_eq!(processor.total.a.v(), 1 + 2, "total.a");
+    assert_eq!(processor.total.b.v(), 3 + 4, "total.b");
+    assert_eq!(processor.total.sum.v(), 1 + 2 + 3 + 4, "total.sum");
 
     Ok(())
 }

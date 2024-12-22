@@ -1,22 +1,22 @@
 use std::{thread::{sleep, spawn}, time::{Duration, Instant}};
-use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame};
+use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame, NativeOptions};
 use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use timer::*;
+use stopwatch::*;
 use view::*;
 
-mod timer;
+mod stopwatch;
 mod view;
 
 struct App {
-    processor: Processor<Timer>,
+    processor: Processor<Stopwatch>,
 }
 
 impl App {
     fn new(cc: &CreationContext) -> Self {
-        let processor = Processor::<Timer>::new(
-            |result| if let Err(err) = result { log::info!("{err}") }, 
+        let processor = Processor::<Stopwatch>::new(
+            |result| if let Err(err) = result { log::error!("{err}") }, 
             |node, message| node.handle(message),
         );
 
@@ -54,13 +54,12 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result<()> {
-    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
+    .unwrap_or_else(|err| log::warn!("{err}"));
 
-    let options = eframe::NativeOptions::default();
-    
     eframe::run_native(
-        "Timer",
-        options,
+        "Stopwatch",
+        NativeOptions::default(),
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
 }
