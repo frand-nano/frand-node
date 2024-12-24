@@ -1,6 +1,8 @@
 use super::*;
 
-pub trait Node<S: State>: Emitter<S> {
+pub trait Node<S: State>: AsRef<Self> + Emitter<S> {
+    type State: State;
+
     fn new_from(
         consensus: &S::Consensus,
         reporter: &Reporter,

@@ -42,6 +42,7 @@ where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {
         Node::new_from(self, reporter)
     }
 
+    #[inline]
     fn clone_state(&self) -> S { 
         self.v() 
     }
@@ -52,7 +53,8 @@ where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {
             None => Ok(self.set_v(packet.read_state())),
         }
     }
-    
+
+    #[inline]
     fn apply_state(&mut self, state: S) {
         self.set_v(state);
     }
@@ -75,6 +77,8 @@ impl<S: AtomicState> AtomicNode<S> {
 
 impl<S> Node<S> for AtomicNode<S> 
 where S: AtomicState<Consensus = AtomicConsensus<S>> {    
+    type State = S;
+    
     fn new_from(
         consensus: &AtomicConsensus<S>,
         reporter: &Reporter,
@@ -86,9 +90,14 @@ where S: AtomicState<Consensus = AtomicConsensus<S>> {
         }
     }
 
+    #[inline]
     fn clone_state(&self) -> S {
         self.v()
     }
+}
+
+impl<S: AtomicState> AsRef<Self> for AtomicNode<S> {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<S: AtomicState> Emitter<S> for AtomicNode<S> {    

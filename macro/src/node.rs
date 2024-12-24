@@ -172,7 +172,9 @@ pub fn expand(
             }
         }
 
-        impl #mp::Node<#state_name> for #node_name {
+        impl #mp::Node<#state_name> for #node_name { 
+            type State = #state_name;
+
             fn new_from(
                 consensus: &#consensus_name,
                 reporter: &#mp::Reporter,
@@ -189,6 +191,10 @@ pub fn expand(
                     #(#names: self.#names.clone_state(),)*   
                 }
             }
+        }
+
+        impl AsRef<Self> for #node_name {
+            #[inline] fn as_ref(&self) -> &Self { self }
         }
 
         impl #mp::Emitter<#state_name> for #node_name {  

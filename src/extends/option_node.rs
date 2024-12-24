@@ -220,6 +220,8 @@ impl<S: State> OptionNode<S> {
 
 impl<S: State> Node<Option<S>> for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>, Consensus = OptionConsensus<S>> {    
+    type State = Option<S>;
+
     fn new_from(
         consensus: &OptionConsensus<S>,
         reporter: &Reporter,
@@ -238,6 +240,10 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = OptionConsensus<S
             false => None,
         }
     }
+}
+
+impl<S: State> AsRef<Self> for OptionNode<S> {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<S: State> Emitter<Option<S>> for OptionNode<S> 

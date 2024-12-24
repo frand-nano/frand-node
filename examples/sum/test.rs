@@ -2,6 +2,7 @@
 fn sum() -> anyhow::Result<()> {
     use log::LevelFilter;
     use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use extends::Processor;
     use frand_node::*;
     use crate::Sums;
     

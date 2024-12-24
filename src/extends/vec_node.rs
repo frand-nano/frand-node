@@ -338,6 +338,8 @@ impl<S: State> VecNode<S> {
 
 impl<'a, S: State> Node<Vec<S>> for VecNode<S> 
 where Vec<S>: State<Message = VecMessage<S>, Consensus = VecConsensus<S>> {    
+    type State = Vec<S>;
+
     fn new_from(
         consensus: &VecConsensus<S>,
         reporter: &Reporter,
@@ -358,6 +360,10 @@ where Vec<S>: State<Message = VecMessage<S>, Consensus = VecConsensus<S>> {
         .map(|item| item.clone_state())
         .collect()
     }
+}
+
+impl<S: State> AsRef<Self> for VecNode<S> {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<S: State> Emitter<Vec<S>> for VecNode<S> 

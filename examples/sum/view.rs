@@ -1,5 +1,5 @@
 use eframe::egui::Ui;
-use crate::{inc_button::IncButton, sum::*};
+use crate::{inc_on_click::IncButton, sum::*};
 
 pub trait SumSubView {
     fn view(&self, label: &str, ui: &mut Ui);
@@ -9,9 +9,9 @@ impl SumSubView for SumSubNode {
     fn view(&self, label: &str, ui: &mut Ui) {        
         ui.horizontal(|ui| {
             ui.label(label);
-            self.a.view(ui);
+            ui.inc_button(&self.a);
             ui.label(" + ");
-            self.b.view(ui);
+            ui.inc_button(&self.b);
             ui.label(format!(" : {}", self.sum.v()));
         });
     }

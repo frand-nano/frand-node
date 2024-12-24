@@ -1,10 +1,11 @@
 use eframe::{egui::{CentralPanel, Context}, Frame, NativeOptions};
+use extends::Container;
 use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use view::*;
 
-mod inc_button;
+mod inc_on_click;
 mod view;
 
 struct App {

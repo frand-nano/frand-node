@@ -1,5 +1,6 @@
 use std::{thread::{sleep, spawn}, time::{Duration, Instant}};
 use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame, NativeOptions};
+use extends::Processor;
 use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};

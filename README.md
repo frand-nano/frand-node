@@ -26,6 +26,8 @@
 * [examples/vec](https://github.com/frand-nano/frand-node/blob/main/examples/vec)
 
 
+아래는 [examples/sum](https://github.com/frand-nano/frand-node/blob/main/examples/sum) 예시입니다.
+
 * `#[derive(Node)]`
 ```rust
 #[derive(Node)]

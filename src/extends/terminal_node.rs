@@ -89,6 +89,8 @@ impl<S: State> TerminalNode<S> {
 
 impl<S> Node<S> for TerminalNode<S> 
 where S: State<Consensus = TerminalConsensus<S>> {    
+    type State = S;
+    
     fn new_from(
         consensus: &TerminalConsensus<S>,
         reporter: &Reporter,
@@ -103,6 +105,10 @@ where S: State<Consensus = TerminalConsensus<S>> {
     fn clone_state(&self) -> S {
         self.read().clone()
     }
+}
+
+impl<S: State> AsRef<Self> for TerminalNode<S> {
+    #[inline] fn as_ref(&self) -> &Self { self }
 }
 
 impl<S: State> Emitter<S> for TerminalNode<S> {    

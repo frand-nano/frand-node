@@ -40,3 +40,4 @@ anyhow = "1.0"
 simplelog = "0.12"
 tokio = { version = "1.4", features = ["rt", "rt-multi-thread", "time", "macros"] }
 eframe = "0.29"
+num = "0.4"

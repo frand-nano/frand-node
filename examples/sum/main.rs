@@ -1,11 +1,12 @@
 use eframe::{egui::{CentralPanel, Context}, Frame, NativeOptions};
+use extends::Processor;
 use frand_node::*;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use sum::*;
 use view::*;
 
-mod inc_button;
+mod inc_on_click;
 mod sum;
 mod view;
 mod test;

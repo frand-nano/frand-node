@@ -12,13 +12,8 @@ pub mod extends;
 pub mod prelude {
     pub use frand_node_macro::*;
     
-    pub use crate::{
-        bases::{
-            State, Message, Consensus, Node, Emitter, Emitable,  
-        },
-        extends::{
-            Container, Processor, AsyncProcessor,
-        },        
+    pub use crate::bases::{
+        State, Message, Consensus, Node, Emitter, Emitable,  
     };
 }
 

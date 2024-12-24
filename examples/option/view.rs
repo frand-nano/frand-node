@@ -1,12 +1,13 @@
 use eframe::egui::Ui;
+use extends::OptionNode;
 use frand_node::*;
-use crate::inc_button::IncButton;
+use crate::inc_on_click::IncButton;
 
 pub trait OptionNumberView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl OptionNumberView for <Option<i32> as State>::Node {
+impl OptionNumberView for OptionNode<i32> {
     fn view(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let is_some = self.item().is_some();
@@ -18,7 +19,7 @@ impl OptionNumberView for <Option<i32> as State>::Node {
             }
             
             if let Some(number) = self.item() {          
-                number.view(ui);
+                ui.inc_button(&number);
             }
         });
     }

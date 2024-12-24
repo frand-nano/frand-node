@@ -1,12 +1,13 @@
 use eframe::egui::Ui;
+use extends::VecNode;
 use frand_node::*;
-use crate::inc_button::IncButton;
+use crate::inc_on_click::IncButton;
 
 pub trait VecNumberView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl VecNumberView for <Vec<i32> as State>::Node {
+impl VecNumberView for VecNode<i32> {
     fn view(&self, ui: &mut Ui) {
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
@@ -23,8 +24,8 @@ impl VecNumberView for <Vec<i32> as State>::Node {
                 }
             });
 
-            for item in self.items() {
-                item.view(ui);
+            for item in self.items() {   
+                ui.inc_button(&item); 
             }
         });
     }

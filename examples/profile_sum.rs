@@ -1,3 +1,4 @@
+use extends::Processor;
 use serde::{Deserialize, Serialize};
 use frand_node::*;
 
@@ -45,8 +46,6 @@ impl SumSubNode {
 }
 
 fn main() -> anyhow::Result<()> {
-    use frand_node::*;
-    
     // Sums 를 다루는 Processor 를 생성
     let mut processor = Processor::<Sums>::new(
         // emit() 으로 발생한 이벤트 콜백

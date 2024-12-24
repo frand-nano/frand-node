@@ -1,7 +1,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use super::*;
 
-pub trait State: 'static + Default + Clone + Serialize + DeserializeOwned + Emitable {
+pub trait State: 'static + Default + Clone + Sized + Serialize + DeserializeOwned + Emitable {
     type Message: Message;
     type Consensus: Consensus<Self>;
     type Node: Node<Self>;
