@@ -96,10 +96,6 @@ where S: AtomicState<Consensus = AtomicConsensus<S>> {
     }
 }
 
-impl<S: AtomicState> AsRef<Self> for AtomicNode<S> {
-    #[inline] fn as_ref(&self) -> &Self { self }
-}
-
 impl<S: AtomicState> Emitter<S> for AtomicNode<S> {    
     fn emit(&self, state: S) {
         self.reporter.report(&self.key, state)
@@ -112,7 +108,7 @@ impl<S: AtomicState> Emitter<S> for AtomicNode<S> {
 }
 
 macro_rules! impl_atomic_state_for {
-    ( $($tys: ty : $atomics: ty : $arc_atomics: ident,)+ ) => {   
+    ( $($tys: ty : $atomics: ty : $arc_atomics: ident),+ $(,)? ) => {   
         $(
             impl State for $tys {
                 type Message = Self;

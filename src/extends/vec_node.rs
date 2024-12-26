@@ -362,10 +362,6 @@ where Vec<S>: State<Message = VecMessage<S>, Consensus = VecConsensus<S>> {
     }
 }
 
-impl<S: State> AsRef<Self> for VecNode<S> {
-    #[inline] fn as_ref(&self) -> &Self { self }
-}
-
 impl<S: State> Emitter<Vec<S>> for VecNode<S> 
 where Vec<S>: State {  
     fn emit(&self, state: Vec<S>) {

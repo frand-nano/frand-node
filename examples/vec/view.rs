@@ -1,7 +1,7 @@
 use eframe::egui::Ui;
 use extends::VecNode;
 use frand_node::*;
-use crate::inc_on_click::IncButton;
+use crate::clickable::IncButton;
 
 pub trait VecNumberView {
     fn view(&self, ui: &mut Ui);

@@ -242,10 +242,6 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = OptionConsensus<S
     }
 }
 
-impl<S: State> AsRef<Self> for OptionNode<S> {
-    #[inline] fn as_ref(&self) -> &Self { self }
-}
-
 impl<S: State> Emitter<Option<S>> for OptionNode<S> 
 where Option<S>: State {      
     fn emit(&self, state: Option<S>) {

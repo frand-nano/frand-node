@@ -107,10 +107,6 @@ where S: State<Consensus = TerminalConsensus<S>> {
     }
 }
 
-impl<S: State> AsRef<Self> for TerminalNode<S> {
-    #[inline] fn as_ref(&self) -> &Self { self }
-}
-
 impl<S: State> Emitter<S> for TerminalNode<S> {    
     fn emit(&self, state: S) {
         self.reporter.report(&self.key, state)

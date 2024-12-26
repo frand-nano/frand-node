@@ -6,7 +6,7 @@ use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use sum::*;
 use view::*;
 
-mod inc_on_click;
+mod clickable;
 mod sum;
 mod view;
 mod test;

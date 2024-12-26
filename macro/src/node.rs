@@ -193,10 +193,6 @@ pub fn expand(
             }
         }
 
-        impl AsRef<Self> for #node_name {
-            #[inline] fn as_ref(&self) -> &Self { self }
-        }
-
         impl #mp::Emitter<#state_name> for #node_name {  
             fn emit(&self, state: #state_name) {
                 self.reporter.report(&self.key, state)

@@ -1,5 +1,5 @@
 use eframe::egui::Ui;
-use crate::{inc_on_click::IncButton, sum::*};
+use crate::{clickable::IncButton, sum::*};
 
 pub trait SumSubView {
     fn view(&self, label: &str, ui: &mut Ui);

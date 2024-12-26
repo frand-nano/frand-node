@@ -22,9 +22,8 @@ mod frand_node {
     }
 }
 
-#[macro_export]
 macro_rules! impl_state_for {
-    ( $($tys: ty,)+ ) => {   
+    ( $($tys: ty),+ $(,)? ) => {   
         $(
             impl frand_node::macro_prelude::State for $tys {
                 type Message = Self;
@@ -53,9 +52,8 @@ macro_rules! impl_state_for {
     };
 }
 
-#[macro_export]
 macro_rules! impl_message_for {
-    ( $($tys: ty,)+ ) => {   
+    ( $($tys: ty),+ $(,)? ) => {   
         $(
             impl frand_node::macro_prelude::Message for $tys {
                 fn from_packet(

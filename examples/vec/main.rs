@@ -5,7 +5,7 @@ use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use view::*;
 
-mod inc_on_click;
+mod clickable;
 mod view;
 
 struct App {

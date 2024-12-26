@@ -6,7 +6,7 @@ use frand_node::*;
 use sum::*;
 use view::*;
 
-mod inc_on_click;
+mod clickable;
 mod sum;
 mod view;
 
