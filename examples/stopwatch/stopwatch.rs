@@ -9,7 +9,7 @@ pub struct Stopwatch {
     pub reset: (),
 }
 
-impl StopwatchNode {
+impl<M: Message> StopwatchNode<M> {
     pub fn handle(&self, message: StopwatchMessage) {
         use StopwatchMessage::*;
 

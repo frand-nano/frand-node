@@ -27,21 +27,10 @@ macro_rules! impl_state_for {
         $(
             impl frand_node::macro_prelude::State for $tys {
                 type Message = Self;
-                type Consensus = frand_node::macro_prelude::TerminalConsensus<Self>;
-                type Node = frand_node::macro_prelude::TerminalNode<Self>;
+                type Consensus<M: frand_node::macro_prelude::Message> = frand_node::macro_prelude::TerminalConsensus<M, Self>;
+                type Node<M: frand_node::macro_prelude::Message> = frand_node::macro_prelude::TerminalNode<M, Self>;
 
                 fn apply(
-                    &mut self, 
-                    depth: usize, 
-                    packet: frand_node::macro_prelude::Packet,
-                ) -> core::result::Result<(), frand_node::macro_prelude::PacketError>  {
-                    match packet.get_id(depth) {
-                        Some(_) => Err(packet.error(depth, "unknown id")),
-                        None => Ok(*self = packet.read_state()),
-                    }
-                }    
-
-                fn apply_message(
                     &mut self,  
                     message: Self::Message,
                 ) {
@@ -56,14 +45,45 @@ macro_rules! impl_message_for {
     ( $($tys: ty),+ $(,)? ) => {   
         $(
             impl frand_node::macro_prelude::Message for $tys {
-                fn from_packet(
-                    depth: usize,
-                    packet: &frand_node::macro_prelude::Packet,
-                ) -> core::result::Result<Self, frand_node::macro_prelude::PacketError> {
-                    match packet.get_id(depth) {
-                        Some(_) => Err(packet.error(depth, "unknown id")),
-                        None => Ok(packet.read_state()),
+                fn from_state<S: frand_node::macro_prelude::State>(
+                    header: &frand_node::macro_prelude::Header, 
+                    depth: usize, 
+                    state: S,
+                ) -> core::result::Result<Self, frand_node::macro_prelude::MessageError> {                    
+                    match header.get(depth).copied() {
+                        Some(_) => Err(frand_node::macro_prelude::MessageError::new(
+                            header.clone(),
+                            depth,
+                            "unknown id",
+                        )),
+                        None => Ok(
+                            unsafe { Self::cast_state::<S, $tys>(state) }
+                        ),
                     }
+                }
+
+                fn from_packet(
+                    packet: &frand_node::macro_prelude::Packet, 
+                    depth: usize, 
+                ) -> core::result::Result<Self, frand_node::macro_prelude::PacketError> {
+                    Ok(match packet.get_id(depth) {
+                        Some(_) => Err(frand_node::macro_prelude::PacketError::new(
+                            packet.clone(),
+                            depth,
+                            "unknown id",
+                        )),
+                        None => Ok(packet.read_state()),
+                    }?)     
+                }
+
+                fn to_packet(
+                    &self,
+                    header: &frand_node::macro_prelude::Header, 
+                ) -> core::result::Result<frand_node::macro_prelude::Packet, frand_node::macro_prelude::MessageError> {
+                    Ok(frand_node::macro_prelude::Packet::new(
+                        header.clone(), 
+                        self,
+                    ))
                 }
             }
         )*      

@@ -1,23 +1,23 @@
 use std::{future::Future, sync::Arc};
 use super::*;
 
-pub trait Node<S: State>: Emitter<S> {
+pub trait Node<M: Message, S: State>: Emitter<M, S> {
     type State: State;
 
     fn new_from(
-        consensus: &S::Consensus,
-        reporter: &Reporter,
+        consensus: &S::Consensus<M>,
+        reporter: &Reporter<M>,
     ) -> Self;
 
     fn clone_state(&self) -> S;
 }
 
-impl<S: State, N: Node<S>> Node<S> for Arc<N> {
+impl<M: Message, S: State, N: Node<M, S>> Node<M, S> for Arc<N> {
     type State = S;
 
     fn new_from(
-        consensus: &<S as State>::Consensus,
-        reporter: &Reporter,
+        consensus: &<S as State>::Consensus<M>,
+        reporter: &Reporter<M>,
     ) -> Self {
         Arc::new(N::new_from(consensus, reporter))
     }
@@ -27,7 +27,7 @@ impl<S: State, N: Node<S>> Node<S> for Arc<N> {
     }
 }
 
-impl<S: State, N: Node<S>> Emitter<S> for Arc<N> {
+impl<M: Message, S: State, N: Node<M, S>> Emitter<M, S> for Arc<N> {
     fn emit(&self, emitable: S) {
         self.as_ref().emit(emitable)
     }

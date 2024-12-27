@@ -6,7 +6,7 @@ pub trait StopwatchView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl StopwatchView for StopwatchNode {
+impl<M: Message> StopwatchView for StopwatchNode<M> {
     fn view(&self, ui: &mut Ui) {        
         ui.label(format!("elapsed : {:.1}", *self.elapsed.v()));
 

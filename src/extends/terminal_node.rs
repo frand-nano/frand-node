@@ -1,20 +1,21 @@
-use std::{future::Future, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
+use std::{future::Future, marker::PhantomData, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
 use crate::bases::*;
 
 #[derive(Debug, Clone)]
-pub struct TerminalConsensus<S: State> {
+pub struct TerminalConsensus<M: Message, S: State> {
     key: NodeKey,
     state: Arc<RwLock<S>>,    
+    _phantom: PhantomData<M>,
 }
 
 #[derive(Debug, Clone)]
-pub struct TerminalNode<S: State> {
+pub struct TerminalNode<M: Message, S: State> {
     key: NodeKey,
-    reporter: Reporter,
+    reporter: Reporter<M>,
     state: Arc<RwLock<S>>,    
 }
 
-impl<S: State> TerminalConsensus<S> {
+impl<M: Message, S: State> TerminalConsensus<M, S> {
     pub fn v(&self) -> RwLockReadGuard<S> { self.read() }
 
     fn read(&self) -> RwLockReadGuard<S> { 
@@ -28,13 +29,13 @@ impl<S: State> TerminalConsensus<S> {
     }
 }
 
-impl<S> Default for TerminalConsensus<S> 
-where S: State<Message = S, Node = TerminalNode<S>, Consensus = Self> {      
+impl<M: Message, S> Default for TerminalConsensus<M, S> 
+where S: State<Message = S, Node<M> = TerminalNode<M, S>, Consensus<M> = Self> {      
     fn default() -> Self { Self::new(vec![], None) }
 }
 
-impl<S> Consensus<S> for TerminalConsensus<S> 
-where S: State<Message = S, Node = TerminalNode<S>, Consensus = Self> {      
+impl<M: Message, S> Consensus<M, S> for TerminalConsensus<M, S> 
+where S: State<Message = S, Node<M> = TerminalNode<M, S>, Consensus<M> = Self> {      
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -44,10 +45,11 @@ where S: State<Message = S, Node = TerminalNode<S>, Consensus = Self> {
         Self { 
             key: key.into_boxed_slice(),   
             state: Default::default(),
+            _phantom: Default::default(),
         }
     }
     
-    fn new_node(&self, reporter: &Reporter) -> TerminalNode<S> {
+    fn new_node(&self, reporter: &Reporter<M>) -> TerminalNode<M, S> {
         Node::new_from(self, reporter)
     }
 
@@ -55,30 +57,16 @@ where S: State<Message = S, Node = TerminalNode<S>, Consensus = Self> {
         self.read().clone()
     }
     
-    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<(), PacketError> {
-        match packet.get_id(depth) {
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => Ok(*self.write() = packet.read_state()),
-        }
+    fn apply(&mut self, message: S::Message) {
+        self.apply_state(message)
     }
     
     fn apply_state(&mut self, state: S) {
         *self.write() = state;
     }
-    
-    fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<S::Message, PacketError> {
-        match packet.get_id(depth) {
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => {
-                let state: S = packet.read_state();    
-                *self.write() = state.clone();                
-                Ok(state)
-            },
-        }
-    }
 }
 
-impl<S: State> TerminalNode<S> {
+impl<M: Message, S: State> TerminalNode<M, S> {
     pub fn v(&self) -> RwLockReadGuard<S> { self.read() }
 
     fn read(&self) -> RwLockReadGuard<S> { 
@@ -87,13 +75,13 @@ impl<S: State> TerminalNode<S> {
     }
 }
 
-impl<S> Node<S> for TerminalNode<S> 
-where S: State<Consensus = TerminalConsensus<S>> {    
+impl<M: Message, S> Node<M, S> for TerminalNode<M, S> 
+where S: State<Consensus<M> = TerminalConsensus<M, S>> {    
     type State = S;
     
     fn new_from(
-        consensus: &TerminalConsensus<S>,
-        reporter: &Reporter,
+        consensus: &TerminalConsensus<M, S>,
+        reporter: &Reporter<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
@@ -107,13 +95,13 @@ where S: State<Consensus = TerminalConsensus<S>> {
     }
 }
 
-impl<S: State> Emitter<S> for TerminalNode<S> {    
+impl<M: Message, S: State> Emitter<M, S> for TerminalNode<M, S> {    
     fn emit(&self, state: S) {
         self.reporter.report(&self.key, state)
     }
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
-        self.reporter.report_future(&self.key, future)
+        self.reporter.report_future(self.key.clone(), future)
     }
 }

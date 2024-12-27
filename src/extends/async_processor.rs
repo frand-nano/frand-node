@@ -1,32 +1,32 @@
 use futures::{future::BoxFuture, stream::{FuturesUnordered, StreamExt}, FutureExt};
 use tokio::{select, sync::mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender}};
 use std::{collections::{HashSet, VecDeque}, ops::Deref};
-use bases::{NodeKey, EmitableFuture, Packet, Reporter, Error, Result};
+use bases::{NodeKey, EmitableFuture, Reporter, Error, Result};
 use crossbeam::channel::{unbounded, Receiver};
 use crate::*;
 
 type AsyncProcessorTask<S> = BoxFuture<'static, Result<ContextOrTask<S>>>;
 
 pub struct AsyncProcessor<S: State> {
-    node: S::Node,
-    consensus: S::Consensus,
-    input_tx: UnboundedSender<EmitableFuture>,
-    input_rx: UnboundedReceiver<EmitableFuture>,
-    output_tx: UnboundedSender<Packet>,
-    output_rx: Option<UnboundedReceiver<Packet>>,
+    node: S::Node<S::Message>,
+    consensus: S::Consensus<S::Message>,
+    input_tx: UnboundedSender<EmitableFuture<S::Message>>,
+    input_rx: UnboundedReceiver<EmitableFuture<S::Message>>,
+    output_tx: UnboundedSender<S::Message>,
+    output_rx: Option<UnboundedReceiver<S::Message>>,
     contexts: Vec<AsyncProcessorContext<S>>,
     tasks: FuturesUnordered<AsyncProcessorTask<S>>,
-    update: fn(&S::Node, S::Message),
+    update: fn(&S::Node<S::Message>, S::Message),
 }
 
 pub struct AsyncProcessorContext<S: State> {
-    node: S::Node,
-    consensus: S::Consensus,
+    node: S::Node<S::Message>,
+    consensus: S::Consensus<S::Message>,
     processed: HashSet<NodeKey>,    
-    process_rx: Receiver<EmitableFuture>,
-    output_tx: UnboundedSender<Packet>,
-    futures: VecDeque<EmitableFuture>,
-    update: fn(&S::Node, S::Message),
+    process_rx: Receiver<EmitableFuture<S::Message>>,
+    output_tx: UnboundedSender<S::Message>,
+    futures: VecDeque<EmitableFuture<S::Message>>,
+    update: fn(&S::Node<S::Message>, S::Message),
 }
 
 pub enum ContextOrTask<S: State> {
@@ -35,21 +35,21 @@ pub enum ContextOrTask<S: State> {
 }
 
 impl<S: State> Deref for AsyncProcessor<S> {
-    type Target = S::Consensus;
+    type Target = S::Consensus<S::Message>;
     fn deref(&self) -> &Self::Target { &self.consensus }
 }
 
 impl<S: State> AsyncProcessor<S> {
-    pub fn node(&self) -> &S::Node { &self.node }
-    pub fn input_tx(&self) -> &UnboundedSender<EmitableFuture> { &self.input_tx }
-    pub fn input_rx(&self) -> &UnboundedReceiver<EmitableFuture> { &self.input_rx }
-    pub fn output_tx(&self) -> &UnboundedSender<Packet> { &self.output_tx }
-    pub fn take_output_rx(&mut self) -> Option<UnboundedReceiver<Packet>> { self.output_rx.take() }
+    pub fn node(&self) -> &S::Node<S::Message> { &self.node }
+    pub fn input_tx(&self) -> &UnboundedSender<EmitableFuture<S::Message>> { &self.input_tx }
+    pub fn input_rx(&self) -> &UnboundedReceiver<EmitableFuture<S::Message>> { &self.input_rx }
+    pub fn output_tx(&self) -> &UnboundedSender<S::Message> { &self.output_tx }
+    pub fn take_output_rx(&mut self) -> Option<UnboundedReceiver<S::Message>> { self.output_rx.take() }
 
     pub fn new<F>(
         callback: F,
-        update: fn(&S::Node, S::Message),
-    ) -> Self where F: 'static + Fn(Result<(), SendError<EmitableFuture>>) + Send + Sync {
+        update: fn(&S::Node<S::Message>, S::Message),
+    ) -> Self where F: 'static + Fn(Result<(), SendError<EmitableFuture<S::Message>>>) + Send + Sync {
         let (input_tx, input_rx) = unbounded_channel();
         let (output_tx, output_rx) = unbounded_channel();
 
@@ -118,12 +118,12 @@ impl<S: State> AsyncProcessor<S> {
 }
 
 impl<S: State> AsyncProcessorContext<S> {
-    pub fn node(&self) -> &S::Node { &self.node }
+    pub fn node(&self) -> &S::Node<S::Message> { &self.node }
 
     fn new(
-        consensus: S::Consensus,
-        output_tx: UnboundedSender<Packet>,
-        update: fn(&S::Node, S::Message),
+        consensus: S::Consensus<S::Message>,
+        output_tx: UnboundedSender<S::Message>,
+        update: fn(&S::Node<S::Message>, S::Message),
     ) -> Self {
         let (process_tx, process_rx) = unbounded();
 
@@ -148,10 +148,10 @@ impl<S: State> AsyncProcessorContext<S> {
                 if !self.processed.contains(&future.0) {
                     self.processed.insert(future.0.clone());
         
-                    let packet = future.1.await.to_packet(&future.0);
-                    let message = self.consensus.apply_export(0, &packet)?;
+                    let message = future.1.await;
+                    self.consensus.apply(message.clone());
     
-                    self.output_tx.send(packet)?;
+                    self.output_tx.send(message.clone())?;
         
                     (self.update)(self.node(), message);
                 }

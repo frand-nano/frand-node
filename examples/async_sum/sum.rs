@@ -17,7 +17,7 @@ pub struct SumSub {
     pub sum: i32,
 }
 
-impl SumsNode {
+impl<M: Message> SumsNode<M> {
     pub fn handle(&self, message: SumsMessage) {
         use SumsMessage::*;
         use SumSubMessage::*;
@@ -39,7 +39,7 @@ impl SumsNode {
     }
 }
 
-impl SumSubNode {
+impl<M: Message> SumSubNode<M> {
     // SumSub 의 a 와 b 의 합을 sum 에 emit()
     fn emit_expensive_sum(&self) {
         let a = self.a.v();

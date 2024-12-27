@@ -7,7 +7,7 @@ pub trait OptionNumberView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl OptionNumberView for OptionNode<i32> {
+impl<M: Message> OptionNumberView for OptionNode<M, i32> {
     fn view(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let is_some = self.item().is_some();

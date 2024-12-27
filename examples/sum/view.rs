@@ -1,11 +1,12 @@
 use eframe::egui::Ui;
 use crate::{clickable::IncButton, sum::*};
+use frand_node::*;
 
 pub trait SumSubView {
     fn view(&self, label: &str, ui: &mut Ui);
 }
 
-impl SumSubView for SumSubNode {
+impl<M: Message> SumSubView for SumSubNode<M> {
     fn view(&self, label: &str, ui: &mut Ui) {        
         ui.horizontal(|ui| {
             ui.label(label);
@@ -21,7 +22,7 @@ pub trait SumView {
     fn view(&self, label: &str, ui: &mut Ui);
 }
 
-impl SumView for SumsNode {
+impl<M: Message> SumView for SumsNode<M> {
     fn view(&self, label: &str, ui: &mut Ui) {
         ui.vertical(|ui| {
             self.sum1.view(&format!("{label}.sum1"), ui);

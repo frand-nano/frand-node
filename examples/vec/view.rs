@@ -7,7 +7,7 @@ pub trait VecNumberView {
     fn view(&self, ui: &mut Ui);
 }
 
-impl VecNumberView for VecNode<i32> {
+impl<M: Message> VecNumberView for VecNode<M, i32> {
     fn view(&self, ui: &mut Ui) {
         ui.vertical(|ui| {
             ui.horizontal(|ui| {

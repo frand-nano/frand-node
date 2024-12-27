@@ -11,7 +11,7 @@ mod sum;
 mod view;
 
 struct App {    
-    node: SumsNode,
+    node: SumsNode<SumsMessage>,
 }
 
 impl App {

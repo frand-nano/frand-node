@@ -1,92 +1,96 @@
-use std::{future::Future, sync::Arc};
+use std::{any::type_name_of_val, future::Future, sync::Arc};
 use crossbeam::channel::Sender;
 use futures::{future::BoxFuture, FutureExt};
-use crate::bases::Packet;
 use super::*;
 
-pub type EmitableFuture = (NodeKey, BoxFuture<'static, Box<dyn Emitable>>);
+pub type EmitableFuture<M> = (NodeKey, BoxFuture<'static, M>);
 
 #[derive(Clone)]
-pub enum Reporter {
-    Callback(Arc<dyn Fn(Packet) + Send + Sync>),
-    Sender(Sender<Packet>),
-    FutureCallback(Arc<dyn Fn(EmitableFuture) + Send + Sync>),
-    None,
+pub enum Reporter<M: Message> {
+    Callback(Arc<dyn Fn(PacketMessage<M>) + Send + Sync>),
+    Sender(Sender<PacketMessage<M>>),
+    FutureCallback(Arc<dyn Fn(EmitableFuture<M>) + Send + Sync>),
 }
 
-impl std::fmt::Debug for Reporter {
+impl<M: Message> std::fmt::Debug for Reporter<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Reporter::Callback(_) => {
-                write!(f, "Reporter::Callback(Arc<dyn Fn(Packet) + Send + Sync>)")
+            Reporter::Callback(callback) => {
+                write!(f, "Reporter::Callback({})", type_name_of_val(callback))
             },
             Reporter::Sender(sender) => {
                 write!(f, "Reporter::Sender({:#?})", sender)
             },
-            Reporter::FutureCallback(_) => {
-                write!(f, "Reporter::FutureCallback(Arc<dyn Fn((NodeKey, BoxFuture<dyn Emitable>)) + Send + Sync>)")
+            Reporter::FutureCallback(callback) => {
+                write!(f, "Reporter::FutureCallback({})", type_name_of_val(callback))
             },
-            Reporter::None => write!(f, "Reporter::None"),
         }
     }
 }
 
-impl Reporter {
+impl<M: Message> Reporter<M> {
     pub fn new_callback<F>(callback: F) -> Self 
-    where F: 'static + Fn(Packet) + Send + Sync { 
+    where F: 'static + Fn(PacketMessage<M>) + Send + Sync { 
         Self::Callback(Arc::new(callback)) 
     }
 
-    pub fn new_sender(sender: Sender<Packet>) -> Self { 
+    pub fn new_sender(sender: Sender<PacketMessage<M>>) -> Self { 
         Self::Sender(sender) 
     }
     
     pub fn new_future_callback<F>(callback: F) -> Self 
-    where F: 'static + Fn(EmitableFuture) + Send + Sync { 
+    where F: 'static + Fn(EmitableFuture<M>) + Send + Sync { 
         Self::FutureCallback(Arc::new(callback)) 
     }
 
-    pub fn report<E: 'static + Emitable>(
+    pub fn report<S: State>(
         &self, 
         node_key: &NodeKey, 
-        emitable: E,
+        state: S,
     ) {
         match self {
             Reporter::Callback(callback) => { 
-                callback(emitable.into_packet(node_key)); 
+                callback(
+                    PacketMessage {
+                        header: node_key.clone(),
+                        message: M::from_state(node_key, 0, state)
+                        .unwrap_or_else(|err| panic!("{:?} {err}", node_key)),
+                    }                    
+                ); 
             },
-            Reporter::Sender(sender) => { 
-                sender.send(emitable.into_packet(node_key)).ok(); 
+            Reporter::Sender(sender) => {
+                sender.send(
+                    PacketMessage {
+                        header: node_key.clone(),
+                        message: M::from_state(node_key, 0, state)
+                        .unwrap_or_else(|err| panic!("{:?} {err}", node_key)),
+                    }     
+                ).unwrap_or_else(|err| panic!("{:?} {err}", node_key)); 
             },
             Reporter::FutureCallback(callback) => { 
-                callback((node_key.to_owned(), async { 
-                    Box::new(emitable) as Box<dyn Emitable> 
+                let node_key = node_key.clone();
+                callback((node_key.clone(), async move { 
+                    M::from_state(&node_key, 0, state) 
+                    .unwrap_or_else(|err| panic!("{:?} {err}", node_key))
                 }.boxed())); 
-            },
-            Reporter::None => {
-                
             },
         }
     }
 
-    pub fn report_future<Fu, E>(
+    pub fn report_future<S: State, Fu>(
         &self, 
-        node_key: &NodeKey, 
+        node_key: NodeKey, 
         future: Fu,
-    ) 
-    where 
-    Fu: 'static + Future<Output = E> + Send,
-    E: 'static + Emitable + Sized,
-    {
+    ) where Fu: 'static + Future<Output = S> + Send {
         match self {
             Reporter::Callback(_) => { unimplemented!(); },
             Reporter::Sender(_) => { unimplemented!(); },
             Reporter::FutureCallback(callback) => { 
-                callback((node_key.to_owned(), async {
-                    Box::new(future.await) as Box<dyn Emitable>
+                callback((node_key.clone(), async move {
+                    M::from_state(&node_key, 0, future.await)
+                    .unwrap_or_else(|err| panic!("{:?} {err}", node_key))
                 }.boxed())); 
             },
-            Reporter::None => {},
         }
     }
 }

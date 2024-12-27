@@ -5,9 +5,9 @@ use frand_node::*;
 use super::Clickable;
 
 #[allow(dead_code)]
-pub trait IncOnClick<S: State>: Clickable 
+pub trait IncOnClick<M: Message, S: State>: Clickable 
 where S: Display + Integer {
-    fn inc_on_click(&self, node: &impl Node<S>) {     
+    fn inc_on_click(&self, node: &impl Node<M, S>) {     
         if self.clicked() {
             let mut value = node.clone_state();
             value.inc();
@@ -17,5 +17,5 @@ where S: Display + Integer {
     }
 }
 
-impl<S: State> IncOnClick<S> for Response 
+impl<M: Message, S: State> IncOnClick<M, S> for Response 
 where S: Display + Integer {}

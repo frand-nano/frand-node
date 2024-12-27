@@ -1,11 +1,11 @@
 use std::future::Future;
-use bases::{Node, NodeId, NodeKey, Packet, PacketError, Reporter};
+use bases::{Header, MessageError, Node, NodeId, NodeKey, Packet, PacketError, Reporter};
 use crate::*;
 
 const IS_SOME_ID: NodeId = 0;
 const ITEM_ID: NodeId = 1;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum OptionMessage<S: State> {
     #[allow(non_camel_case_types)] item(Option<S::Message>),
     IsSome(bool),
@@ -13,57 +13,32 @@ pub enum OptionMessage<S: State> {
 }
 
 #[derive(Debug, Clone)]
-pub struct OptionConsensus<S: State> { 
+pub struct OptionConsensus<M: Message, S: State> { 
     key: NodeKey,
-    pub is_some: <bool as State>::Consensus, 
-    item: S::Consensus,
+    pub is_some: <bool as State>::Consensus<M>, 
+    item: S::Consensus<M>,
 }
 
 #[derive(Debug, Clone)]
-pub struct OptionNode<S: State> { 
+pub struct OptionNode<M: Message, S: State> { 
     key: NodeKey,
-    reporter: Reporter,
-    pub is_some: <bool as State>::Node, 
-    item: S::Node,
+    reporter: Reporter<M>,
+    pub is_some: <bool as State>::Node<M>, 
+    item: S::Node<M>,
 }
 
 impl<S: State> State for Option<S> {
     type Message = OptionMessage<S>;
-    type Consensus = OptionConsensus<S>;
-    type Node = OptionNode<S>; 
+    type Consensus<M: Message> = OptionConsensus<M, S>;
+    type Node<M: Message> = OptionNode<M, S>; 
 
     fn apply(
-        &mut self, 
-        depth: usize, 
-        packet: Packet,
-    ) -> Result<(), PacketError>  {
-        match packet.get_id(depth) {
-            Some(ITEM_ID) => match self {
-                Some(item) => item.apply(depth+1, packet),
-                None => Ok(()),
-            },
-            Some(IS_SOME_ID) => {
-                let is_some: bool = packet.read_state();
-                Ok(if is_some != self.is_some() {
-                    match is_some {
-                        true => *self = Some(S::default()),
-                        false => *self = None,
-                    }
-                })                                
-            },
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => Ok(*self = packet.read_state()),
-        }
-    }    
-
-    fn apply_message(
         &mut self,  
         message: Self::Message,
     ) {
         match message {
-            Self::Message::item(message) => match (self, message) {
-                (Some(item), Some(message)) => item.apply_message(message),
-                _ => {},
+            Self::Message::item(message) => if let (Some(item), Some(message)) = (self, message) {
+                item.apply(message)
             }, 
             Self::Message::IsSome(is_some) => {
                 if is_some != self.is_some() {
@@ -79,21 +54,58 @@ impl<S: State> State for Option<S> {
 }
 
 impl<S: State> Message for OptionMessage<S> {
+    fn from_state<S2: State>(
+        header: &Header, 
+        depth: usize, 
+        state: S2,
+    ) -> Result<Self, MessageError> {                    
+        match header.get(depth).copied() {
+            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as State>::Message::from_state(header, depth + 1, state)?)),
+            Some(ITEM_ID) => Ok(Self::item(S::Message::from_state(header, depth + 1, state).ok())),
+            Some(_) => Err(MessageError::new(
+                header.clone(),
+                depth,
+                "unknown id",
+            )),
+            None => Ok(Self::State(
+                unsafe { Self::cast_state(state) }
+            )),
+        }
+    }
+
     fn from_packet(
-        depth: usize,
-        packet: &Packet,
-    ) -> Result<Self, PacketError> {
+        packet: &Packet, 
+        depth: usize, 
+    ) -> Result<Self, PacketError> {                    
         match packet.get_id(depth) {
-            Some(ITEM_ID) => Ok(Self::item(Some(S::Message::from_packet(depth + 1, packet)?))),
-            Some(IS_SOME_ID) => Ok(Self::IsSome(bool::from_packet(depth + 1, packet)?)),
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => Ok(Self::State(packet.read_state())),
+            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as State>::Message::from_packet(packet, depth + 1)?)),
+            Some(ITEM_ID) => Ok(Self::item(S::Message::from_packet(packet, depth + 1).ok())),
+            Some(_) => Err(PacketError::new(
+                packet.clone(),
+                depth,
+                "unknown id",
+            )),
+            None => Ok(Self::State(
+                packet.read_state()
+            )),
+        }
+    }
+
+    fn to_packet(
+        &self,
+        header: &Header, 
+    ) -> Result<Packet, MessageError> {
+        match self {
+            Self::item(Some(message)) => message.to_packet(header),
+            Self::item(None) => Ok(Packet::new(header.clone(), &())),
+            Self::IsSome(is_some) => Ok(Packet::new(header.clone(), is_some)),
+            Self::State(state) => Ok(Packet::new(header.clone(), state)),
         }
     }
 }
 
-impl<S: State> OptionConsensus<S> {
-    pub fn item(&self) -> Option<&S::Consensus> {
+impl<M: Message, S: State> OptionConsensus<M, S> {
+    pub fn item(&self) -> Option<&S::Consensus<M>> {
         match self.is_some.v() {
             true => Some(&self.item),
             false => None,
@@ -101,13 +113,13 @@ impl<S: State> OptionConsensus<S> {
     }
 }
 
-impl<S: State> Default for OptionConsensus<S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus = Self, Node = OptionNode<S>> {      
+impl<M: Message, S: State> Default for OptionConsensus<M, S> 
+where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> = OptionNode<M, S>> {      
     fn default() -> Self { Self::new(vec![], None) }
 }
 
-impl<S: State> Consensus<Option<S>> for OptionConsensus<S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus = Self, Node = OptionNode<S>> {    
+impl<M: Message, S: State> Consensus<M, Option<S>> for OptionConsensus<M, S> 
+where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> = OptionNode<M, S>> {    
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -121,7 +133,7 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = Self, Node = Opti
         }
     }
     
-    fn new_node(&self, reporter: &Reporter) -> OptionNode<S> {
+    fn new_node(&self, reporter: &Reporter<M>) -> OptionNode<M, S> {
         Node::new_from(self, reporter)
     }
         
@@ -132,34 +144,23 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = Self, Node = Opti
         }
     }
 
-    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<(), PacketError> {
-        Ok(match packet.get_id(depth) {
-            Some(ITEM_ID) => {
+    fn apply(&mut self, message: OptionMessage<S>) {
+        match message {
+            OptionMessage::item(message) => if let Some(message) = message { 
                 if self.is_some.v() {
-                    self.item.apply(depth+1, packet)?;
+                    self.item.apply(message)
                 }
             },
-            Some(IS_SOME_ID) => {
-                let is_some: bool = packet.read_state();
-
+            OptionMessage::IsSome(is_some) => {
                 if is_some != self.is_some.v() {
-                    self.is_some.apply_state(is_some);
+                    self.is_some.apply(is_some);
                     if is_some {
                         self.item.apply_state(S::default());
                     }
                 }
             },
-            Some(_) => Err(packet.error(depth, "unknown id"))?,
-            None => {
-                let option_state: Option<S> = packet.read_state();
-
-                self.is_some.apply_state(option_state.is_some());
-
-                if let Some(state) = option_state {
-                    self.item.apply_state(state);
-                }
-            },
-        })        
+            OptionMessage::State(state) => self.apply_state(state),
+        }    
     }
 
     fn apply_state(&mut self, state: Option<S>) {
@@ -171,46 +172,10 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = Self, Node = Opti
             None => self.is_some.apply_state(false),
         }
     }
-
-    fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<OptionMessage<S>, PacketError> {
-        match packet.get_id(depth) {
-            Some(ITEM_ID) => {
-                if self.is_some.v() {
-                    Ok(OptionMessage::item(Some(self.item.apply_export(depth+1, packet)?)))
-                } else {
-                    Ok(OptionMessage::item(None))
-                }
-            },
-            Some(IS_SOME_ID) => {
-                let is_some: bool = packet.read_state();
-
-                if is_some != self.is_some.v() {
-                    self.is_some.apply_state(is_some);
-                    if is_some {
-                        self.item.apply_state(S::default());
-                    }
-                }
-                
-                Ok(OptionMessage::IsSome(is_some))
-            },
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => {
-                let option_state: Option<S> = packet.read_state();
-                
-                self.is_some.apply_state(option_state.is_some());
-
-                if let Some(state) = &option_state {
-                    self.item.apply_state(state.clone());
-                }
-
-                Ok(OptionMessage::State(option_state))
-            },
-        }        
-    }
 }
 
-impl<S: State> OptionNode<S> {
-    pub fn item(&self) -> Option<&S::Node> {
+impl<M: Message, S: State> OptionNode<M, S> {
+    pub fn item(&self) -> Option<&S::Node<M>> {
         match self.is_some.v() {
             true => Some(&self.item),
             false => None,
@@ -218,13 +183,13 @@ impl<S: State> OptionNode<S> {
     }
 }
 
-impl<S: State> Node<Option<S>> for OptionNode<S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus = OptionConsensus<S>> {    
+impl<M: Message, S: State> Node<M, Option<S>> for OptionNode<M, S> 
+where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = OptionConsensus<M, S>> {    
     type State = Option<S>;
 
     fn new_from(
-        consensus: &OptionConsensus<S>,
-        reporter: &Reporter,
+        consensus: &OptionConsensus<M, S>,
+        reporter: &Reporter<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
@@ -242,7 +207,7 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus = OptionConsensus<S
     }
 }
 
-impl<S: State> Emitter<Option<S>> for OptionNode<S> 
+impl<M: Message, S: State> Emitter<M, Option<S>> for OptionNode<M, S> 
 where Option<S>: State {      
     fn emit(&self, state: Option<S>) {
         self.reporter.report(&self.key, state)
@@ -250,6 +215,6 @@ where Option<S>: State {
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = Option<S>> + Send {
-        self.reporter.report_future(&self.key, future)
+        self.reporter.report_future(self.key.clone(), future)
     }
 }

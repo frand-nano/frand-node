@@ -1,31 +1,32 @@
-use std::{future::Future, sync::{atomic::*, Arc}};
+use std::{future::Future, marker::PhantomData, sync::{atomic::*, Arc}};
 use crate::bases::*;
 
 #[derive(Debug, Clone)]
-pub struct AtomicConsensus<S: AtomicState> {
+pub struct AtomicConsensus<M: Message, S: AtomicState> {
     key: NodeKey,
-    state: S::Atomic,    
+    state: S::Atomic,   
+    _phantom: PhantomData<M>, 
 }
 
 #[derive(Debug, Clone)]
-pub struct AtomicNode<S: AtomicState> {
+pub struct AtomicNode<M: Message, S: AtomicState> {
     key: NodeKey,
-    reporter: Reporter,
+    reporter: Reporter<M>,
     state: S::Atomic,   
 }
 
-impl<S: AtomicState> AtomicConsensus<S> {
+impl<M: Message, S: AtomicState> AtomicConsensus<M, S> {
     #[inline] pub fn v(&self) -> S { self.state.load(Ordering::Relaxed) }
     #[inline] fn set_v(&self, state: S) { self.state.store(state, Ordering::Relaxed) }
 }
 
-impl<S> Default for AtomicConsensus<S> 
-where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {      
+impl<M: Message, S> Default for AtomicConsensus<M, S> 
+where S: AtomicState<Message = S, Node<M> = AtomicNode<M, S>, Consensus<M> = Self> {      
     fn default() -> Self { Self::new(vec![], None) }
 }
 
-impl<S> Consensus<S> for AtomicConsensus<S> 
-where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {      
+impl<M: Message, S> Consensus<M, S> for AtomicConsensus<M, S> 
+where S: AtomicState<Message = S, Node<M> = AtomicNode<M, S>, Consensus<M> = Self> {      
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -34,11 +35,12 @@ where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {
         
         Self { 
             key: key.into_boxed_slice(),   
-            state: S::Atomic::new(Default::default()),
+            state: Atomic::new(Default::default()),
+            _phantom: Default::default(),
         }
     }
     
-    fn new_node(&self, reporter: &Reporter) -> AtomicNode<S> {
+    fn new_node(&self, reporter: &Reporter<M>) -> AtomicNode<M, S> {
         Node::new_from(self, reporter)
     }
 
@@ -47,41 +49,28 @@ where S: AtomicState<Message = S, Node = AtomicNode<S>, Consensus = Self> {
         self.v() 
     }
     
-    fn apply(&mut self, depth: usize, packet: &Packet) -> Result<(), PacketError> {
-        match packet.get_id(depth) {
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => Ok(self.set_v(packet.read_state())),
-        }
+    #[inline]
+    fn apply(&mut self, message: S::Message) {
+        self.apply_state(message)
     }
 
     #[inline]
     fn apply_state(&mut self, state: S) {
         self.set_v(state);
     }
-    
-    fn apply_export(&mut self, depth: usize, packet: &Packet) -> Result<S::Message, PacketError> {
-        match packet.get_id(depth) {
-            Some(_) => Err(packet.error(depth, "unknown id")),
-            None => {
-                let state: S = packet.read_state();    
-                self.set_v(state);                
-                Ok(state)
-            },
-        }
-    }
 }
 
-impl<S: AtomicState> AtomicNode<S> {
+impl<M: Message, S: AtomicState> AtomicNode<M, S> {
     #[inline] pub fn v(&self) -> S { self.state.load(Ordering::Relaxed) }
 }
 
-impl<S> Node<S> for AtomicNode<S> 
-where S: AtomicState<Consensus = AtomicConsensus<S>> {    
+impl<M: Message, S> Node<M, S> for AtomicNode<M, S> 
+where S: AtomicState<Consensus<M> = AtomicConsensus<M, S>> {    
     type State = S;
     
     fn new_from(
-        consensus: &AtomicConsensus<S>,
-        reporter: &Reporter,
+        consensus: &AtomicConsensus<M, S>,
+        reporter: &Reporter<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
@@ -96,14 +85,14 @@ where S: AtomicState<Consensus = AtomicConsensus<S>> {
     }
 }
 
-impl<S: AtomicState> Emitter<S> for AtomicNode<S> {    
+impl<M: Message, S: AtomicState> Emitter<M, S> for AtomicNode<M, S> {    
     fn emit(&self, state: S) {
         self.reporter.report(&self.key, state)
     }
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
-        self.reporter.report_future(&self.key, future)
+        self.reporter.report_future(self.key.clone(), future)
     }
 }
 
@@ -112,21 +101,10 @@ macro_rules! impl_atomic_state_for {
         $(
             impl State for $tys {
                 type Message = Self;
-                type Consensus = AtomicConsensus<Self>;
-                type Node = AtomicNode<Self>;
+                type Consensus<M: Message> = AtomicConsensus<M, Self>;
+                type Node<M: Message> = AtomicNode<M, Self>;
 
                 fn apply(
-                    &mut self, 
-                    depth: usize, 
-                    packet: Packet,
-                ) -> core::result::Result<(), PacketError>  {
-                    match packet.get_id(depth) {
-                        Some(_) => Err(packet.error(depth, "unknown id")),
-                        None => Ok(*self = packet.read_state()),
-                    }
-                }    
-
-                fn apply_message(
                     &mut self,  
                     message: Self::Message,
                 ) {

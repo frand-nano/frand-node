@@ -13,7 +13,7 @@ pub mod prelude {
     pub use frand_node_macro::*;
     
     pub use crate::bases::{
-        State, Message, Consensus, Node, Emitter, Emitable,  
+        State, Message, Consensus, Node, Emitter,   
     };
 }
 
@@ -24,7 +24,7 @@ pub mod macro_prelude {
         bases::{
             Result, Header, NodeKey, NodeId, 
             Reporter, 
-            Packet, PacketError,
+            Packet, PacketError, PacketMessage, MessageError,
         },
         extends::{
             TerminalConsensus, TerminalNode,
