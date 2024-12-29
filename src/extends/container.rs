@@ -1,7 +1,6 @@
 use std::ops::Deref;
-
-use bases::{PacketMessage, Reporter, Result};
 use crossbeam::channel::{unbounded, Receiver, SendError, Sender};
+use bases::*;
 use crate::*;
 
 pub struct Container<S: State> {
@@ -9,8 +8,8 @@ pub struct Container<S: State> {
     consensus: S::Consensus<S::Message>,
     input_tx: Sender<PacketMessage<S::Message>>,
     input_rx: Receiver<PacketMessage<S::Message>>,
-    output_tx: Sender<S::Message>,
-    output_rx: Option<Receiver<S::Message>>,
+    output_tx: Sender<PacketMessage<S::Message>>,
+    output_rx: Option<Receiver<PacketMessage<S::Message>>>,
 }
 
 impl<S: State> Deref for Container<S> {
@@ -21,8 +20,8 @@ impl<S: State> Deref for Container<S> {
 impl<S: State> Container<S> {
     pub fn node(&self) -> &S::Node<S::Message> { &self.node }
     pub fn input_tx(&self) -> &Sender<PacketMessage<S::Message>> { &self.input_tx }
-    pub fn output_tx(&self) -> &Sender<S::Message> { &self.output_tx }
-    pub fn take_output_rx(&mut self) -> Option<Receiver<S::Message>> { self.output_rx.take() }
+    pub fn output_tx(&self) -> &Sender<PacketMessage<S::Message>> { &self.output_tx }
+    pub fn take_output_rx(&mut self) -> Option<Receiver<PacketMessage<S::Message>>> { self.output_rx.take() }
 
     pub fn new<F>(
         callback: F,
@@ -38,7 +37,10 @@ impl<S: State> Container<S> {
         let consensus = S::Consensus::default();
 
         Self {
-            node: consensus.new_node(&Reporter::new_callback(callback)),
+            node: consensus.new_node(
+                &Callback::new(callback), 
+                &FutureCallback::default(),
+            ),
             consensus,
             input_tx, input_rx,
             output_tx,
@@ -51,7 +53,7 @@ impl<S: State> Container<S> {
             self.consensus.apply(packet.message.clone());
 
             if self.output_rx.is_none() {
-                self.output_tx.send(packet.message)?; 
+                self.output_tx.send(packet)?; 
             }
         })        
     }

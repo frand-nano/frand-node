@@ -23,7 +23,7 @@ pub mod macro_prelude {
     pub use crate::{
         bases::{
             Result, Header, NodeKey, NodeId, 
-            Reporter, 
+            Callback, FutureCallback, 
             Packet, PacketError, PacketMessage, MessageError,
         },
         extends::{

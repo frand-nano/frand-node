@@ -14,8 +14,7 @@
 
 * **Consensus**: **Node** 의 생성과 **State**, **Packet** 의 적용을 담당합니다. 
 * **Container**: callback을 지정하여 input, output channel 과 **Node** 를 연계합니다.
-* **Processor**: **Container** 에 더하여 **Message** 를 match 하여 Event 를 연쇄 적용합니다. 하나의 **Packet** 으로부터 하나 이상의 **Packet** 을 생성하고 **State** 에 적용하는 방식으로 동작합니다.
-* **AsyncProcessor**: **Processor** 에 더하여 **Node** 에 emit 된 future 들을 비동기적으로 동시 처리합니다.
+* **Processor**: **Container** 에 더하여 **Message** 를 match 하여 Event 를 연쇄 적용합니다. 하나의 **Packet** 으로부터 하나 이상의 **Packet** 을 생성하고 **State** 에 적용하는 방식으로 동작합니다. emit 된 future 들은 비동기적으로 동시 처리됩니다.
 
 ## 예시 
 

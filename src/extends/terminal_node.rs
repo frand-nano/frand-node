@@ -11,7 +11,8 @@ pub struct TerminalConsensus<M: Message, S: State> {
 #[derive(Debug, Clone)]
 pub struct TerminalNode<M: Message, S: State> {
     key: NodeKey,
-    reporter: Reporter<M>,
+    callback: Callback<M>,
+    future_callback: FutureCallback<M>,
     state: Arc<RwLock<S>>,    
 }
 
@@ -49,8 +50,12 @@ where S: State<Message = S, Node<M> = TerminalNode<M, S>, Consensus<M> = Self> {
         }
     }
     
-    fn new_node(&self, reporter: &Reporter<M>) -> TerminalNode<M, S> {
-        Node::new_from(self, reporter)
+    fn new_node(
+        &self, 
+        callback: &Callback<M>, 
+        future_callback: &FutureCallback<M>,
+    ) -> TerminalNode<M, S> {
+        Node::new_from(self, callback, future_callback)
     }
 
     fn clone_state(&self) -> S {
@@ -79,13 +84,17 @@ impl<M: Message, S> Node<M, S> for TerminalNode<M, S>
 where S: State<Consensus<M> = TerminalConsensus<M, S>> {    
     type State = S;
     
+    fn key(&self) -> &NodeKey { &self.key }
+
     fn new_from(
         consensus: &TerminalConsensus<M, S>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
-            reporter: reporter.clone(), 
+            callback: callback.clone(), 
+            future_callback: future_callback.clone(), 
             state: consensus.state.clone(), 
         }
     }
@@ -97,11 +106,11 @@ where S: State<Consensus<M> = TerminalConsensus<M, S>> {
 
 impl<M: Message, S: State> Emitter<M, S> for TerminalNode<M, S> {    
     fn emit(&self, state: S) {
-        self.reporter.report(&self.key, state)
+        self.callback.emit(self.key.clone(), state)
     }
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
-        self.reporter.report_future(self.key.clone(), future)
+        self.future_callback.emit(self.key.clone(), future)
     }
 }

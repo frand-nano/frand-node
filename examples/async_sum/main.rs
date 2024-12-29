@@ -1,5 +1,5 @@
 use eframe::{egui::{CentralPanel, Context}, CreationContext, Frame, NativeOptions};
-use extends::AsyncProcessor;
+use extends::Processor;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use frand_node::*;
@@ -16,7 +16,7 @@ struct App {
 
 impl App {
     fn new(cc: &CreationContext) -> Self {
-        let mut processor = AsyncProcessor::<Sums>::new(
+        let mut processor = Processor::<Sums>::new(
             |result| if let Err(err) = result { log::error!("{err}") }, 
             |node, message| node.handle(message),
         );

@@ -11,7 +11,8 @@ pub struct AtomicConsensus<M: Message, S: AtomicState> {
 #[derive(Debug, Clone)]
 pub struct AtomicNode<M: Message, S: AtomicState> {
     key: NodeKey,
-    reporter: Reporter<M>,
+    callback: Callback<M>,
+    future_callback: FutureCallback<M>,
     state: S::Atomic,   
 }
 
@@ -40,8 +41,12 @@ where S: AtomicState<Message = S, Node<M> = AtomicNode<M, S>, Consensus<M> = Sel
         }
     }
     
-    fn new_node(&self, reporter: &Reporter<M>) -> AtomicNode<M, S> {
-        Node::new_from(self, reporter)
+    fn new_node(
+        &self, 
+        callback: &Callback<M>, 
+        future_callback: &FutureCallback<M>,
+    ) -> AtomicNode<M, S> {
+        Node::new_from(self, callback, future_callback)
     }
 
     #[inline]
@@ -68,13 +73,17 @@ impl<M: Message, S> Node<M, S> for AtomicNode<M, S>
 where S: AtomicState<Consensus<M> = AtomicConsensus<M, S>> {    
     type State = S;
     
+    fn key(&self) -> &NodeKey { &self.key }
+
     fn new_from(
         consensus: &AtomicConsensus<M, S>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
-            reporter: reporter.clone(), 
+            callback: callback.clone(), 
+            future_callback: future_callback.clone(), 
             state: consensus.state.clone(), 
         }
     }
@@ -87,12 +96,12 @@ where S: AtomicState<Consensus<M> = AtomicConsensus<M, S>> {
 
 impl<M: Message, S: AtomicState> Emitter<M, S> for AtomicNode<M, S> {    
     fn emit(&self, state: S) {
-        self.reporter.report(&self.key, state)
+        self.callback.emit(self.key.clone(), state)
     }
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
-        self.reporter.report_future(self.key.clone(), future)
+        self.future_callback.emit(self.key.clone(), future)
     }
 }
 

@@ -4,9 +4,12 @@ use super::*;
 pub trait Node<M: Message, S: State>: Emitter<M, S> {
     type State: State;
 
+    fn key(&self) -> &NodeKey;
+
     fn new_from(
         consensus: &S::Consensus<M>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self;
 
     fn clone_state(&self) -> S;
@@ -15,11 +18,16 @@ pub trait Node<M: Message, S: State>: Emitter<M, S> {
 impl<M: Message, S: State, N: Node<M, S>> Node<M, S> for Arc<N> {
     type State = S;
 
+    fn key(&self) -> &NodeKey {
+        self.as_ref().key()
+    }
+
     fn new_from(
         consensus: &<S as State>::Consensus<M>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self {
-        Arc::new(N::new_from(consensus, reporter))
+        Arc::new(N::new_from(consensus, callback, future_callback))
     }
 
     fn clone_state(&self) -> S {

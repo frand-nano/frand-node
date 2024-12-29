@@ -5,7 +5,7 @@ mod consensus;
 mod node;
 mod emitter;
 mod packet;
-mod reporter;
+mod callback;
 mod result;
 
 pub use self::{
@@ -16,6 +16,6 @@ pub use self::{
     node::*,
     emitter::*,
     packet::*,
-    reporter::*,
+    callback::*,
     result::*,
 };

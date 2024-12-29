@@ -1,5 +1,5 @@
 use std::future::Future;
-use bases::{Header, MessageError, Node, NodeId, NodeKey, Packet, PacketError, Reporter};
+use bases::*;
 use crate::*;
 
 const IS_SOME_ID: NodeId = 0;
@@ -22,7 +22,8 @@ pub struct OptionConsensus<M: Message, S: State> {
 #[derive(Debug, Clone)]
 pub struct OptionNode<M: Message, S: State> { 
     key: NodeKey,
-    reporter: Reporter<M>,
+    callback: Callback<M>,
+    future_callback: FutureCallback<M>,
     pub is_some: <bool as State>::Node<M>, 
     item: S::Node<M>,
 }
@@ -133,8 +134,12 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> 
         }
     }
     
-    fn new_node(&self, reporter: &Reporter<M>) -> OptionNode<M, S> {
-        Node::new_from(self, reporter)
+    fn new_node(
+        &self, 
+        callback: &Callback<M>, 
+        future_callback: &FutureCallback<M>,
+    ) -> OptionNode<M, S> {
+        Node::new_from(self, callback, future_callback)
     }
         
     fn clone_state(&self) -> Option<S> { 
@@ -186,16 +191,20 @@ impl<M: Message, S: State> OptionNode<M, S> {
 impl<M: Message, S: State> Node<M, Option<S>> for OptionNode<M, S> 
 where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = OptionConsensus<M, S>> {    
     type State = Option<S>;
+    
+    fn key(&self) -> &NodeKey { &self.key }
 
     fn new_from(
         consensus: &OptionConsensus<M, S>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(), 
-            reporter: reporter.clone(), 
-            is_some: Node::new_from(&consensus.is_some, reporter),
-            item: Node::new_from(&consensus.item, reporter),
+            callback: callback.clone(), 
+            future_callback: future_callback.clone(), 
+            is_some: Node::new_from(&consensus.is_some, callback, future_callback),
+            item: Node::new_from(&consensus.item, callback, future_callback),
         }
     }    
 
@@ -210,11 +219,11 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = OptionConsensu
 impl<M: Message, S: State> Emitter<M, Option<S>> for OptionNode<M, S> 
 where Option<S>: State {      
     fn emit(&self, state: Option<S>) {
-        self.reporter.report(&self.key, state)
+        self.callback.emit(self.key.clone(), state)
     }    
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = Option<S>> + Send {
-        self.reporter.report_future(self.key.clone(), future)
+        self.future_callback.emit(self.key.clone(), future)
     }
 }

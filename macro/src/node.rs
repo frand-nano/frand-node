@@ -66,7 +66,8 @@ pub fn expand(
         #[derive(Debug, Clone)]
         #vis struct #node_name<M: #mp::Message> {
             key: #mp::NodeKey,
-            reporter: #mp::Reporter<M>,
+            callback: #mp::Callback<M>,
+            future_callback: #mp::FutureCallback<M>,
             #(#viss #names: #node_tys<M>,)*
         }
 
@@ -154,8 +155,12 @@ pub fn expand(
                 }
             }
     
-            fn new_node(&self, reporter: &#mp::Reporter<M>) -> #node_name<M> {
-                #node_name::new_from(self, reporter)
+            fn new_node(
+                &self, 
+                callback: &#mp::Callback<M>, 
+                future_callback: &#mp::FutureCallback<M>,
+            ) -> #node_name<M> {
+                #node_name::new_from(self, callback, future_callback)
             }
             
             fn clone_state(&self) -> #state_name { 
@@ -179,14 +184,18 @@ pub fn expand(
         impl<M: #mp::Message> #mp::Node<M, #state_name> for #node_name<M> { 
             type State = #state_name;
 
+            fn key(&self) -> &#mp::NodeKey { &self.key }
+
             fn new_from(
                 consensus: &#consensus_name<M>,
-                reporter: &#mp::Reporter<M>,
+                callback: &#mp::Callback<M>, 
+                future_callback: &#mp::FutureCallback<M>,
             ) -> Self {
                 Self { 
                     key: consensus.key.clone(),
-                    reporter: reporter.clone(),
-                    #(#names: #mp::Node::new_from(&consensus.#names, reporter),)*  
+                    callback: callback.clone(), 
+                    future_callback: future_callback.clone(), 
+                    #(#names: #mp::Node::new_from(&consensus.#names, callback, future_callback),)*  
                 }
             }
 
@@ -199,12 +208,12 @@ pub fn expand(
 
         impl<M: #mp::Message> #mp::Emitter<M, #state_name> for #node_name<M> {  
             fn emit(&self, state: #state_name) {
-                self.reporter.report(&self.key, state)
+                self.callback.emit(self.key.clone(), state)
             }
 
             fn emit_future<Fu>(&self, future: Fu) 
             where Fu: 'static + std::future::Future<Output = #state_name> + Send {
-                self.reporter.report_future(self.key.clone(), future)
+                self.future_callback.emit(self.key.clone(), future)
             }
         }
     })

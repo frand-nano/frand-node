@@ -1,5 +1,5 @@
 use std::{future::Future, ops::Index, sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard}};
-use bases::{Header, MessageError, Node, NodeId, NodeKey, Packet, PacketError, Reporter};
+use bases::*;
 use crate::*;
 
 const PUSH_ID: NodeId = NodeId::MAX - 1;
@@ -27,7 +27,8 @@ pub struct VecNode<M: Message, S: State> {
     key: NodeKey,
     push: NodeKey,
     pop: NodeKey, 
-    reporter: Reporter<M>,
+    callback: Callback<M>,
+    future_callback: FutureCallback<M>,
     len: Arc<RwLock<NodeId>>,
     item_consensuses: Arc<RwLock<Vec<S::Consensus<M>>>>,
     items: Arc<RwLock<Vec<Arc<S::Node<M>>>>>,
@@ -191,8 +192,12 @@ where Vec<S>: State<Message = VecMessage<S>, Consensus<M> = Self, Node<M> = VecN
         }
     }
     
-    fn new_node(&self, reporter: &Reporter<M>) -> VecNode<M, S> {
-        Node::new_from(self, reporter)
+    fn new_node(
+        &self, 
+        callback: &Callback<M>, 
+        future_callback: &FutureCallback<M>,
+    ) -> VecNode<M, S> {
+        Node::new_from(self, callback, future_callback)
     }
              
     fn clone_state(&self) -> Vec<S> { 
@@ -259,26 +264,26 @@ impl<M: Message, S: State> VecNode<M, S> {
         let mut item_key = self.key.to_vec();
         item_key.push(self.len() as NodeId);
 
-        self.reporter.report(&self.push, item.clone());
-        self.reporter.report(&item_key.into_boxed_slice(), item);
+        self.callback.emit(self.push.clone(), item.clone());
+        self.callback.emit(item_key.into_boxed_slice(), item.clone());
     }
 
     pub fn emit_pop(&self) {
-        self.reporter.report(&self.pop, ())
+        self.callback.emit(self.pop.clone(), ());
     }
     
     pub fn emit_push_future<Fu>(&self, future: Fu) 
     where 
     Fu: 'static + Future<Output = S> + Send,
     {
-        self.reporter.report_future(self.push.clone(), future)
+        self.future_callback.emit(self.push.clone(), future);
     }
     
     pub fn emit_pop_future<Fu>(&self, future: Fu) 
     where 
     Fu: 'static + Future<Output = ()> + Send,
     {
-        self.reporter.report_future(self.pop.clone(), future)
+        self.future_callback.emit(self.pop.clone(), future);
     }
 
     fn len_read(&self) -> RwLockReadGuard<NodeId> {
@@ -298,7 +303,7 @@ impl<M: Message, S: State> VecNode<M, S> {
             let items_len = items.len();
 
             for i in items_len..(*len as usize) {
-                let node = item_consensuses[i].new_node(&self.reporter);
+                let node = item_consensuses[i].new_node(&self.callback, &self.future_callback);
                 items.push(Arc::new(node));
             }
 
@@ -317,15 +322,19 @@ impl<'a, M: Message, S: State> Node<M, Vec<S>> for VecNode<M, S>
 where Vec<S>: State<Message = VecMessage<S>, Consensus<M> = VecConsensus<M, S>> {    
     type State = Vec<S>;
 
+    fn key(&self) -> &NodeKey { &self.key }
+
     fn new_from(
         consensus: &VecConsensus<M, S>,
-        reporter: &Reporter<M>,
+        callback: &Callback<M>,
+        future_callback: &FutureCallback<M>,
     ) -> Self {
         Self { 
             key: consensus.key.clone(),
             push: consensus.push.clone(),
             pop: consensus.pop.clone(),
-            reporter: reporter.clone(),
+            callback: callback.clone(), 
+            future_callback: future_callback.clone(), 
             len: consensus.len.clone(),
             item_consensuses: consensus.items.clone(),
             items: Default::default(),
@@ -342,12 +351,12 @@ where Vec<S>: State<Message = VecMessage<S>, Consensus<M> = VecConsensus<M, S>> 
 impl<M: Message, S: State> Emitter<M, Vec<S>> for VecNode<M, S> 
 where Vec<S>: State {  
     fn emit(&self, state: Vec<S>) {
-        self.reporter.report(&self.key, state)
+        self.callback.emit(self.key.clone(), state)
     }    
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = Vec<S>> + Send {
-        self.reporter.report_future(self.key.clone(), future)
+        self.future_callback.emit(self.key.clone(), future)
     }
 }
 

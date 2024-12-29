@@ -4,7 +4,6 @@ mod option_node;
 mod vec_node;
 mod container;
 mod processor;
-mod async_processor;
 
 pub use self::{
     atomic_node::*,
@@ -13,7 +12,6 @@ pub use self::{
     vec_node::*,
     container::*,
     processor::*,
-    async_processor::*,
 };
 
 mod frand_node {

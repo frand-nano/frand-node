@@ -91,30 +91,66 @@ impl From<MessageError> for Error {
     }
 }
 
-impl<M: Message> From<crossbeam::channel::SendError<PacketMessage<M>>> for Error {
+impl<M: Message> From<crossbeam::channel::SendError<PacketMessage<M>>> for MessageError {
     fn from(packet: crossbeam::channel::SendError<PacketMessage<M>>) -> Self {
-        Self::Message(MessageError {
+        MessageError {
             header: packet.0.header,
             depth: 0,
             message: format!("{:?}", packet.0.message),
-        })
+        }
+    }
+}
+
+impl<M: Message> From<tokio::sync::mpsc::error::SendError<PacketMessage<M>>> for MessageError {
+    fn from(packet: tokio::sync::mpsc::error::SendError<PacketMessage<M>>) -> Self {
+        MessageError {
+            header: packet.0.header,
+            depth: 0,
+            message: format!("{:?}", packet.0.message),
+        }
+    }
+}
+
+impl<M: Message> From<crossbeam::channel::SendError<EmitableFuture<M>>> for MessageError {
+    fn from(packet: crossbeam::channel::SendError<EmitableFuture<M>>) -> Self {
+        MessageError {
+            header: packet.0.0,
+            depth: 0,
+            message: format!("future"),
+        }
+    }
+}
+
+impl<M: Message> From<tokio::sync::mpsc::error::SendError<EmitableFuture<M>>> for MessageError {
+    fn from(packet: tokio::sync::mpsc::error::SendError<EmitableFuture<M>>) -> Self {
+        MessageError {
+            header: packet.0.0,
+            depth: 0,
+            message: format!("future"),
+        }
+    }
+}
+
+impl<M: Message> From<crossbeam::channel::SendError<PacketMessage<M>>> for Error {
+    fn from(packet: crossbeam::channel::SendError<PacketMessage<M>>) -> Self {
+        packet.into()
     }
 }
 
 impl<M: Message> From<tokio::sync::mpsc::error::SendError<PacketMessage<M>>> for Error {
-    fn from(value: tokio::sync::mpsc::error::SendError<PacketMessage<M>>) -> Self {
-        Self::Text(value.to_string())
+    fn from(packet: tokio::sync::mpsc::error::SendError<PacketMessage<M>>) -> Self {
+        packet.into()
     }
 }
 
-impl<M: Message> From<crossbeam::channel::SendError<M>> for Error {
-    fn from(value: crossbeam::channel::SendError<M>) -> Self {
-        Self::Text(value.to_string())
+impl<M: Message> From<crossbeam::channel::SendError<EmitableFuture<M>>> for Error {
+    fn from(packet: crossbeam::channel::SendError<EmitableFuture<M>>) -> Self {
+        packet.into()
     }
 }
 
-impl<M: Message> From<tokio::sync::mpsc::error::SendError<M>> for Error {
-    fn from(value: tokio::sync::mpsc::error::SendError<M>) -> Self {
-        Self::Text(value.to_string())
+impl<M: Message> From<tokio::sync::mpsc::error::SendError<EmitableFuture<M>>> for Error {
+    fn from(packet: tokio::sync::mpsc::error::SendError<EmitableFuture<M>>) -> Self {
+        packet.into()
     }
 }
