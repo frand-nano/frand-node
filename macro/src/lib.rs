@@ -11,11 +11,11 @@ use syn::*;
 
 mod node;
 
-#[proc_macro_derive(Node)]
-pub fn node(item: TokenStream) -> TokenStream {   
+#[proc_macro_attribute]
+pub fn node(_attr: TokenStream, item: TokenStream) -> TokenStream {   
     let state = parse_macro_input!(item as ItemStruct);
 
-    let node = node::expand(&state)
+    let node = node::expand(state)
     .unwrap_or_else(Error::into_compile_error);
 
     quote! { 
@@ -23,9 +23,9 @@ pub fn node(item: TokenStream) -> TokenStream {
     }.into()
 }
 
-#[proc_macro_derive(NodeMacro)]
-pub fn node_macro(item: TokenStream) -> TokenStream {
-    let node: proc_macro2::TokenStream = node(item.clone()).into();
+#[proc_macro_attribute]
+pub fn node_macro(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let node: proc_macro2::TokenStream = node(attr, item.clone()).into();
     let state = parse_macro_input!(item as ItemStruct);
 
     let macro_name = Ident::new(

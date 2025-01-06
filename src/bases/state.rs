@@ -1,12 +1,12 @@
-use std::{any::Any, fmt::Debug};
 use serde::{de::DeserializeOwned, Serialize};
-
 use super::*;
 
-pub trait State: 'static + Default + Clone + Debug + Send + Sync + Sized + Any + Serialize + DeserializeOwned {
-    type Message: Message;
-    type Consensus<M: Message>: Consensus<M, Self>;
-    type Node<M: Message>: Node<M, Self>;
-
+pub trait State: Serialize + DeserializeOwned + Accessor<State = Self> + Emitable {
     fn apply(&mut self, message: Self::Message);    
+
+    unsafe fn from_emitable(emitable: &Box<dyn Emitable>) -> Self {
+        (emitable.as_ref() as *const dyn Emitable)
+        .cast::<Self>()
+        .as_ref().cloned().unwrap()
+    }
 }

@@ -1,12 +1,10 @@
-use std::any::Any;
 use std::fmt::Debug;
 use super::*;
 
 pub trait Message: 'static + Debug + Clone + Sized + Send + Sync {   
-    fn from_state<S: State>(
-        header: &Header, 
+    fn from_packet_message(
+        packet: &PacketMessage, 
         depth: usize, 
-        state: S,
     ) -> Result<Self, MessageError>;
 
     fn from_packet(
@@ -18,10 +16,4 @@ pub trait Message: 'static + Debug + Clone + Sized + Send + Sync {
         &self,
         header: &Header, 
     ) -> Result<Packet, MessageError>;
-
-    unsafe fn cast_state<S1: State, S2: State>(state: S1) -> S2 {
-        (&state as *const dyn Any)
-        .cast::<S2>()
-        .as_ref().cloned().unwrap()
-    }
 }

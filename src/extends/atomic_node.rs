@@ -1,118 +1,93 @@
-use std::{future::Future, marker::PhantomData, sync::{atomic::*, Arc}};
+use std::{marker::PhantomData, sync::{atomic::*, Arc}};
 use crate::bases::*;
 
 #[derive(Debug, Clone)]
-pub struct AtomicConsensus<M: Message, S: AtomicState> {
+pub struct AtomicNode<S: State, A: AtomicState<S>> {
+    _phantom: PhantomData<S>,
     key: NodeKey,
-    state: S::Atomic,   
-    _phantom: PhantomData<M>, 
+    emitter: Option<Emitter>,
+    state: A,   
 }
 
-#[derive(Debug, Clone)]
-pub struct AtomicNode<M: Message, S: AtomicState> {
-    key: NodeKey,
-    callback: Callback<M>,
-    future_callback: FutureCallback<M>,
-    state: S::Atomic,   
-}
-
-impl<M: Message, S: AtomicState> AtomicConsensus<M, S> {
+impl<S: State, A: AtomicState<S>> AtomicNode<S, A> {
     #[inline] pub fn v(&self) -> S { self.state.load(Ordering::Relaxed) }
-    #[inline] fn set_v(&self, state: S) { self.state.store(state, Ordering::Relaxed) }
 }
 
-impl<M: Message, S> Default for AtomicConsensus<M, S> 
-where S: AtomicState<Message = S, Node<M> = AtomicNode<M, S>, Consensus<M> = Self> {      
-    fn default() -> Self { Self::new(vec![], None) }
+impl<S: State + Message, A: AtomicState<S>> Default for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {
+    fn default() -> Self { Self::new(vec![], None, None) }
 }
 
-impl<M: Message, S> Consensus<M, S> for AtomicConsensus<M, S> 
-where S: AtomicState<Message = S, Node<M> = AtomicNode<M, S>, Consensus<M> = Self> {      
+impl<S: State + Message, A: AtomicState<S>> Accessor for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {
+    type State = S;
+    type Message = S;     
+    type Node = Self;
+}
+
+impl<S: State + Message, A: AtomicState<S>> Fallback for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {
+    fn fallback(&self, _message: Self::Message, _delta: Option<f32>) {}
+}
+
+impl<S: State + Message, A: AtomicState<S>> System for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {
+    fn handle(&self, _message: Self::Message, _delta: Option<f32>) {}
+}
+
+impl<S: State + Message, A: AtomicState<S>> Node<S> for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {  
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
+        emitter: Option<&Emitter>,
     ) -> Self {
         if let Some(id) = id { key.push(id); }
         
         Self { 
-            key: key.into_boxed_slice(),   
-            state: Atomic::new(Default::default()),
             _phantom: Default::default(),
+            key: key.into_boxed_slice(), 
+            emitter: emitter.cloned(),
+            state: AtomicState::new(Default::default()),
         }
     }
-    
-    fn new_node(
-        &self, 
-        callback: &Callback<M>, 
-        future_callback: &FutureCallback<M>,
-    ) -> AtomicNode<M, S> {
-        Node::new_from(self, callback, future_callback)
-    }
 
-    #[inline]
-    fn clone_state(&self) -> S { 
-        self.v() 
-    }
-    
-    #[inline]
-    fn apply(&mut self, message: S::Message) {
-        self.apply_state(message)
-    }
-
-    #[inline]
-    fn apply_state(&mut self, state: S) {
-        self.set_v(state);
-    }
-}
-
-impl<M: Message, S: AtomicState> AtomicNode<M, S> {
-    #[inline] pub fn v(&self) -> S { self.state.load(Ordering::Relaxed) }
-}
-
-impl<M: Message, S> Node<M, S> for AtomicNode<M, S> 
-where S: AtomicState<Consensus<M> = AtomicConsensus<M, S>> {    
-    type State = S;
-    
     fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+    fn clone_state(&self) -> S { self.v() } 
+}
 
+impl<S: State + Message, A: AtomicState<S>> Consensus<S> for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {  
     fn new_from(
-        consensus: &AtomicConsensus<M, S>,
-        callback: &Callback<M>,
-        future_callback: &FutureCallback<M>,
+        node: &Self,
+        emitter: Option<&Emitter>,
     ) -> Self {
-        Self { 
-            key: consensus.key.clone(), 
-            callback: callback.clone(), 
-            future_callback: future_callback.clone(), 
-            state: consensus.state.clone(), 
+        Self {
+            _phantom: Default::default(),
+            key: node.key.clone(),
+            emitter: emitter.cloned(),
+            state: node.state.clone(),
         }
     }
 
-    #[inline]
-    fn clone_state(&self) -> S {
-        self.v()
-    }
-}
-
-impl<M: Message, S: AtomicState> Emitter<M, S> for AtomicNode<M, S> {    
-    fn emit(&self, state: S) {
-        self.callback.emit(self.key.clone(), state)
-    }
-
-    fn emit_future<Fu>(&self, future: Fu) 
-    where Fu: 'static + Future<Output = S> + Send {
-        self.future_callback.emit(self.key.clone(), future)
-    }
+    fn set_emitter(&mut self, emitter: Option<&Emitter>) { self.emitter = emitter.cloned() }
+    fn apply(&self, message: S::Message) { self.state.store(message, Ordering::Relaxed) }
+    fn apply_state(&self, state: S) { self.state.store(state, Ordering::Relaxed) }    
 }
 
 macro_rules! impl_atomic_state_for {
-    ( $($tys: ty : $atomics: ty : $arc_atomics: ident),+ $(,)? ) => {   
+    ( $($tys: ty : $atomics: ty),+ $(,)? ) => {   
         $(
-            impl State for $tys {
+            impl Accessor for $tys {
+                type State = Self;
                 type Message = Self;
-                type Consensus<M: Message> = AtomicConsensus<M, Self>;
-                type Node<M: Message> = AtomicNode<M, Self>;
+                type Node = AtomicNode<Self, Arc<$atomics>>;
+            }
 
+            impl Emitable for $tys {}
+
+            impl State for $tys {
                 fn apply(
                     &mut self,  
                     message: Self::Message,
@@ -121,30 +96,23 @@ macro_rules! impl_atomic_state_for {
                 }
             }
 
-            impl AtomicState for $tys {
-                type Atomic = $arc_atomics;
-            }
-
-            #[derive(Debug, Clone)]
-            pub struct $arc_atomics(Arc<$atomics>);
-
-            impl Atomic<$tys> for $arc_atomics {
-                #[inline] fn new(value: $tys) -> Self { Self(Arc::new(<$atomics>::new(value))) }
-                #[inline] fn load(&self, ordering: Ordering) -> $tys { self.0.load(ordering) }
-                #[inline] fn store(&self, value: $tys, ordering: Ordering) { self.0.store(value, ordering) }
+            impl AtomicState<$tys> for Arc<$atomics> {
+                #[inline] fn new(value: $tys) -> Self { Arc::new(<$atomics>::new(value)) }
+                #[inline] fn load(&self, ordering: Ordering) -> $tys { self.as_ref().load(ordering) }
+                #[inline] fn store(&self, value: $tys, ordering: Ordering) { self.as_ref().store(value, ordering) }
             }
         )*      
     };
 }
 
 impl_atomic_state_for!{ 
-    i8: AtomicI8: ArcAtomicI8, 
-    i16: AtomicI16: ArcAtomicI16, 
-    i32: AtomicI32: ArcAtomicI32, 
-    i64: AtomicI64: ArcAtomicI64, 
-    u8: AtomicU8: ArcAtomicU8, 
-    u16: AtomicU16: ArcAtomicU16, 
-    u32: AtomicU32: ArcAtomicU32, 
-    u64: AtomicU64: ArcAtomicU64, 
-    bool: AtomicBool: ArcAtomicBool, 
+    i8: AtomicI8, 
+    i16: AtomicI16, 
+    i32: AtomicI32, 
+    i64: AtomicI64, 
+    u8: AtomicU8, 
+    u16: AtomicU16, 
+    u32: AtomicU32, 
+    u64: AtomicU64, 
+    bool: AtomicBool, 
 }

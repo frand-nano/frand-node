@@ -1,11 +1,10 @@
-mod num_button;
-mod inc_on_click;
-
 use eframe::egui::Response;
 
-#[allow(unused_imports)]
+mod inc_button;
+mod inc_on_click;
+
 pub use self::{
-    num_button::*,
+    inc_button::*,
     inc_on_click::*,
 };
 

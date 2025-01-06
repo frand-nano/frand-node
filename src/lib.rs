@@ -12,8 +12,15 @@ pub mod extends;
 pub mod prelude {
     pub use frand_node_macro::*;
     
-    pub use crate::bases::{
-        State, Message, Consensus, Node, Emitter,   
+    pub use crate::{
+        bases::{
+            Accessor, State, Message, Node, Emitable, Fallback, System,
+            Emitter, 
+        },
+        extends::{
+            Processor, Proxy, OptionNode, VecNode,
+            OptionMessage, VecMessage,
+        },
     };
 }
 
@@ -22,12 +29,11 @@ pub mod macro_prelude {
 
     pub use crate::{
         bases::{
+            Consensus,
             Result, Header, NodeKey, NodeId, 
             Callback, FutureCallback, 
             Packet, PacketError, PacketMessage, MessageError,
         },
-        extends::{
-            TerminalConsensus, TerminalNode,
-        },
+        extends::TerminalNode,
     };
 }

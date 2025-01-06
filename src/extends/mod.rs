@@ -2,16 +2,16 @@ mod atomic_node;
 mod terminal_node;
 mod option_node;
 mod vec_node;
-mod container;
 mod processor;
+mod proxy;
 
 pub use self::{
     atomic_node::*,
     terminal_node::*,
     option_node::*,
     vec_node::*,
-    container::*,
     processor::*,
+    proxy::*,
 };
 
 mod frand_node {
@@ -23,11 +23,15 @@ mod frand_node {
 macro_rules! impl_state_for {
     ( $($tys: ty),+ $(,)? ) => {   
         $(
-            impl frand_node::macro_prelude::State for $tys {
+            impl frand_node::macro_prelude::Accessor for $tys {
+                type State = Self;
                 type Message = Self;
-                type Consensus<M: frand_node::macro_prelude::Message> = frand_node::macro_prelude::TerminalConsensus<M, Self>;
-                type Node<M: frand_node::macro_prelude::Message> = frand_node::macro_prelude::TerminalNode<M, Self>;
+                type Node = frand_node::macro_prelude::TerminalNode<Self>;
+            }
 
+            impl frand_node::macro_prelude::Emitable for $tys {}
+
+            impl frand_node::macro_prelude::State for $tys {
                 fn apply(
                     &mut self,  
                     message: Self::Message,
@@ -43,20 +47,19 @@ macro_rules! impl_message_for {
     ( $($tys: ty),+ $(,)? ) => {   
         $(
             impl frand_node::macro_prelude::Message for $tys {
-                fn from_state<S: frand_node::macro_prelude::State>(
-                    header: &frand_node::macro_prelude::Header, 
+                fn from_packet_message(
+                    packet: &frand_node::macro_prelude::PacketMessage, 
                     depth: usize, 
-                    state: S,
                 ) -> core::result::Result<Self, frand_node::macro_prelude::MessageError> {                    
-                    match header.get(depth).copied() {
+                    match packet.get_id(depth) {
                         Some(_) => Err(frand_node::macro_prelude::MessageError::new(
-                            header.clone(),
+                            packet.key().clone(),
                             depth,
                             "unknown id",
                         )),
-                        None => Ok(
-                            unsafe { Self::cast_state::<S, $tys>(state) }
-                        ),
+                        None => Ok(unsafe { 
+                            frand_node::macro_prelude::State::from_emitable(packet.payload()) 
+                        }),
                     }
                 }
 

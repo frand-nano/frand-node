@@ -1,5 +1,6 @@
-use std::future::Future;
+use std::sync::{atomic::AtomicBool, Arc};
 use bases::*;
+use extends::AtomicNode;
 use crate::*;
 
 const IS_SOME_ID: NodeId = 0;
@@ -7,38 +8,34 @@ const ITEM_ID: NodeId = 1;
 
 #[derive(Debug, Clone)]
 pub enum OptionMessage<S: State> {
-    #[allow(non_camel_case_types)] item(Option<S::Message>),
+    Item(Option<S::Message>),
     IsSome(bool),
     State(Option<S>),
 }
 
 #[derive(Debug, Clone)]
-pub struct OptionConsensus<M: Message, S: State> { 
+pub struct OptionNode<S: State> { 
     key: NodeKey,
-    pub is_some: <bool as State>::Consensus<M>, 
-    item: S::Consensus<M>,
+    emitter: Option<Emitter>,
+    pub is_some: AtomicNode<bool, Arc<AtomicBool>>, 
+    item: S::Node,
 }
 
-#[derive(Debug, Clone)]
-pub struct OptionNode<M: Message, S: State> { 
-    key: NodeKey,
-    callback: Callback<M>,
-    future_callback: FutureCallback<M>,
-    pub is_some: <bool as State>::Node<M>, 
-    item: S::Node<M>,
+impl<A: Accessor> Accessor for Option<A>  {
+    type State = Option<A::State>;
+    type Message = OptionMessage<A::State>;
+    type Node = OptionNode<A::State>; 
 }
+
+impl<S: State> Emitable for Option<S> {}
 
 impl<S: State> State for Option<S> {
-    type Message = OptionMessage<S>;
-    type Consensus<M: Message> = OptionConsensus<M, S>;
-    type Node<M: Message> = OptionNode<M, S>; 
-
     fn apply(
         &mut self,  
         message: Self::Message,
     ) {
         match message {
-            Self::Message::item(message) => if let (Some(item), Some(message)) = (self, message) {
+            Self::Message::Item(message) => if let (Some(item), Some(message)) = (self, message) {
                 item.apply(message)
             }, 
             Self::Message::IsSome(is_some) => {
@@ -55,22 +52,25 @@ impl<S: State> State for Option<S> {
 }
 
 impl<S: State> Message for OptionMessage<S> {
-    fn from_state<S2: State>(
-        header: &Header, 
+    fn from_packet_message(
+        packet: &PacketMessage, 
         depth: usize, 
-        state: S2,
     ) -> Result<Self, MessageError> {                    
-        match header.get(depth).copied() {
-            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as State>::Message::from_state(header, depth + 1, state)?)),
-            Some(ITEM_ID) => Ok(Self::item(S::Message::from_state(header, depth + 1, state).ok())),
+        match packet.get_id(depth) {
+            Some(IS_SOME_ID) => Ok(Self::IsSome(
+                <bool as Accessor>::Message::from_packet_message(packet, depth + 1)?
+            )),
+            Some(ITEM_ID) => Ok(Self::Item(
+                S::Message::from_packet_message(packet, depth + 1).ok()
+            )),
             Some(_) => Err(MessageError::new(
-                header.clone(),
+                packet.key().clone(),
                 depth,
                 "unknown id",
             )),
-            None => Ok(Self::State(
-                unsafe { Self::cast_state(state) }
-            )),
+            None => Ok(Self::State(unsafe { 
+                State::from_emitable(packet.payload()) 
+            })),
         }
     }
 
@@ -79,8 +79,8 @@ impl<S: State> Message for OptionMessage<S> {
         depth: usize, 
     ) -> Result<Self, PacketError> {                    
         match packet.get_id(depth) {
-            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as State>::Message::from_packet(packet, depth + 1)?)),
-            Some(ITEM_ID) => Ok(Self::item(S::Message::from_packet(packet, depth + 1).ok())),
+            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as Accessor>::Message::from_packet(packet, depth + 1)?)),
+            Some(ITEM_ID) => Ok(Self::Item(S::Message::from_packet(packet, depth + 1).ok())),
             Some(_) => Err(PacketError::new(
                 packet.clone(),
                 depth,
@@ -97,16 +97,16 @@ impl<S: State> Message for OptionMessage<S> {
         header: &Header, 
     ) -> Result<Packet, MessageError> {
         match self {
-            Self::item(Some(message)) => message.to_packet(header),
-            Self::item(None) => Ok(Packet::new(header.clone(), &())),
+            Self::Item(Some(message)) => message.to_packet(header),
+            Self::Item(None) => Ok(Packet::new(header.clone(), &())),
             Self::IsSome(is_some) => Ok(Packet::new(header.clone(), is_some)),
             Self::State(state) => Ok(Packet::new(header.clone(), state)),
         }
     }
 }
 
-impl<M: Message, S: State> OptionConsensus<M, S> {
-    pub fn item(&self) -> Option<&S::Consensus<M>> {
+impl<S: State> OptionNode<S> {
+    pub fn item(&self) -> Option<&S::Node> {
         match self.is_some.v() {
             true => Some(&self.item),
             false => None,
@@ -114,44 +114,89 @@ impl<M: Message, S: State> OptionConsensus<M, S> {
     }
 }
 
-impl<M: Message, S: State> Default for OptionConsensus<M, S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> = OptionNode<M, S>> {      
-    fn default() -> Self { Self::new(vec![], None) }
+impl<S: State> Default for OptionNode<S> 
+where Option<S>: State<Message = OptionMessage<S>> {    
+    fn default() -> Self { Self::new(vec![], None, None) }
 }
 
-impl<M: Message, S: State> Consensus<M, Option<S>> for OptionConsensus<M, S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> = OptionNode<M, S>> {    
+impl<S: State> Accessor for OptionNode<S>  {
+    type State = Option<S>;
+    type Message = OptionMessage<S>;     
+    type Node = Self;
+}
+
+impl<S: State> Fallback for OptionNode<S> {
+    fn fallback(&self, message: OptionMessage<S>, delta: Option<f32>) {
+        use OptionMessage::*;
+        match message {
+            Item(Some(message)) => self.item.handle(message, delta),
+            Item(None) => (),
+            IsSome(message) => self.is_some.handle(message, delta),
+            State(_) => (),
+        }
+    }
+}
+
+impl<S: State> System for OptionNode<S> {
+    fn handle(&self, message: Self::Message, delta: Option<f32>) {
+        self.fallback(message, delta);
+    }
+}
+
+impl<S: State> Node<Option<S>> for OptionNode<S> 
+where Option<S>: State<Message = OptionMessage<S>> {  
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
+        emitter: Option<&Emitter>,
     ) -> Self {        
         if let Some(id) = id { key.push(id); }
         
         Self { 
             key: key.clone().into_boxed_slice(),   
-            is_some: Consensus::new(key.clone(), Some(IS_SOME_ID)),
-            item: Consensus::new(key.clone(), Some(ITEM_ID)),
+            emitter: emitter.cloned(),
+            is_some: Node::new(key.clone(), Some(IS_SOME_ID), emitter),
+            item: Node::new(key.clone(), Some(ITEM_ID), emitter),
         }
     }
-    
-    fn new_node(
-        &self, 
-        callback: &Callback<M>, 
-        future_callback: &FutureCallback<M>,
-    ) -> OptionNode<M, S> {
-        Node::new_from(self, callback, future_callback)
-    }
-        
+
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+
     fn clone_state(&self) -> Option<S> { 
         match self.is_some.v() {
             true => Some(self.item.clone_state()),
             false => None,
         }
     }
+}
 
-    fn apply(&mut self, message: OptionMessage<S>) {
+impl<S: State> Consensus<Option<S>> for OptionNode<S> 
+where 
+S::Node: Consensus<S>,
+Option<S>: State<Message = OptionMessage<S>>, 
+{  
+    fn new_from(
+        node: &Self,
+        emitter: Option<&Emitter>,
+    ) -> Self {
+        Self {
+            key: node.key.clone(),
+            emitter: emitter.cloned(),
+            is_some: Consensus::new_from(&node.is_some, emitter),
+            item: Consensus::new_from(&node.item, emitter),
+        }
+    }
+
+    fn set_emitter(&mut self, emitter: Option<&Emitter>) { 
+        self.emitter = emitter.cloned(); 
+        self.is_some.set_emitter(emitter);
+        self.item.set_emitter(emitter);
+    }
+
+    fn apply(&self, message: OptionMessage<S>) {
         match message {
-            OptionMessage::item(message) => if let Some(message) = message { 
+            OptionMessage::Item(message) => if let Some(message) = message { 
                 if self.is_some.v() {
                     self.item.apply(message)
                 }
@@ -168,7 +213,7 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> 
         }    
     }
 
-    fn apply_state(&mut self, state: Option<S>) {
+    fn apply_state(&self, state: Option<S>) {
         match state {
             Some(state) => {
                 self.is_some.apply_state(true);
@@ -176,54 +221,5 @@ where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = Self, Node<M> 
             },
             None => self.is_some.apply_state(false),
         }
-    }
-}
-
-impl<M: Message, S: State> OptionNode<M, S> {
-    pub fn item(&self) -> Option<&S::Node<M>> {
-        match self.is_some.v() {
-            true => Some(&self.item),
-            false => None,
-        }
-    }
-}
-
-impl<M: Message, S: State> Node<M, Option<S>> for OptionNode<M, S> 
-where Option<S>: State<Message = OptionMessage<S>, Consensus<M> = OptionConsensus<M, S>> {    
-    type State = Option<S>;
-    
-    fn key(&self) -> &NodeKey { &self.key }
-
-    fn new_from(
-        consensus: &OptionConsensus<M, S>,
-        callback: &Callback<M>,
-        future_callback: &FutureCallback<M>,
-    ) -> Self {
-        Self { 
-            key: consensus.key.clone(), 
-            callback: callback.clone(), 
-            future_callback: future_callback.clone(), 
-            is_some: Node::new_from(&consensus.is_some, callback, future_callback),
-            item: Node::new_from(&consensus.item, callback, future_callback),
-        }
-    }    
-
-    fn clone_state(&self) -> Option<S> { 
-        match self.is_some.v() {
-            true => Some(self.item.clone_state()),
-            false => None,
-        }
-    }
-}
-
-impl<M: Message, S: State> Emitter<M, Option<S>> for OptionNode<M, S> 
-where Option<S>: State {      
-    fn emit(&self, state: Option<S>) {
-        self.callback.emit(self.key.clone(), state)
-    }    
-
-    fn emit_future<Fu>(&self, future: Fu) 
-    where Fu: 'static + Future<Output = Option<S>> + Send {
-        self.future_callback.emit(self.key.clone(), future)
     }
 }

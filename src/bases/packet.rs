@@ -1,6 +1,5 @@
-use std::{fmt::Debug, io::Cursor};
+use std::{fmt::Debug, io::Cursor, time::Instant};
 use serde::{de::DeserializeOwned, Serialize};
-
 use super::*;
 
 pub type NodeId = u32;
@@ -15,10 +14,11 @@ pub struct Packet {
     payload: Payload,
 }
 
-#[derive(Debug, Clone)]
-pub struct PacketMessage<M: Message> {
-    pub header: Header,
-    pub message: M,
+#[derive(Debug)]
+pub struct PacketMessage {
+    header: Header,
+    payload: Box<dyn Emitable>,
+    carry: Option<Instant>, 
 }
 
 impl Packet {
@@ -61,18 +61,34 @@ impl Packet {
     }
 }
 
-impl<M: Message> PacketMessage<M> {
-    pub fn to_packet<S: State>(&self) -> Result<Packet, MessageError> {
-        self.message.to_packet(&self.header)
-    }
-}
+impl PacketMessage {
+    pub fn key(&self) -> &NodeKey { &self.header }
+    pub fn payload(&self) -> &Box<dyn Emitable> { &self.payload }
+    pub fn carry(&self) -> &Option<Instant> { &self.carry }
 
-impl<M: Message> TryFrom<&Packet> for PacketMessage<M> {
-    type Error = PacketError;
-    fn try_from(packet: &Packet) -> Result<Self, Self::Error> {
-        Ok(Self {
-            header: packet.header.clone(),
-            message: Message::from_packet(packet, 0)?,
-        })
+    pub fn get_id(&self, depth: usize) -> Option<NodeId> { 
+        self.header.get(depth).copied()
+    }
+
+    pub fn set_carry(&mut self) { 
+        self.carry = Some(Instant::now()); 
+    }
+
+    pub fn new(
+        node_key: NodeKey, 
+        payload: Box<dyn Emitable>,
+    ) -> Self {
+        Self {
+            header: node_key,
+            payload,
+            carry: None,
+        } 
+    }
+
+    pub unsafe fn to_packet<S: State>(&self) -> Packet {
+        Packet::new::<S>(
+            self.header.clone(), 
+            &S::from_emitable(&self.payload)
+        )
     }
 }

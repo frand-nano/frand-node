@@ -1,47 +1,33 @@
-use std::{future::Future, sync::Arc};
+use std::future::Future;
 use super::*;
 
-pub trait Node<M: Message, S: State>: Emitter<M, S> {
-    type State: State;
-
-    fn key(&self) -> &NodeKey;
-
-    fn new_from(
-        consensus: &S::Consensus<M>,
-        callback: &Callback<M>,
-        future_callback: &FutureCallback<M>,
+pub trait Node<S: State>: System {   
+    fn new(
+        key: Vec<NodeId>,
+        id: Option<NodeId>,
+        emitter: Option<&Emitter>,
     ) -> Self;
 
+    fn key(&self) -> &NodeKey;
+    fn emitter(&self) -> Option<&Emitter>;
     fn clone_state(&self) -> S;
-}
 
-impl<M: Message, S: State, N: Node<M, S>> Node<M, S> for Arc<N> {
-    type State = S;
-
-    fn key(&self) -> &NodeKey {
-        self.as_ref().key()
+    fn emit(&self, state: S) {
+        if let Some(emitter) = self.emitter() {
+            emitter.emit(self.key().clone(), state)
+        }
     }
 
-    fn new_from(
-        consensus: &<S as State>::Consensus<M>,
-        callback: &Callback<M>,
-        future_callback: &FutureCallback<M>,
-    ) -> Self {
-        Arc::new(N::new_from(consensus, callback, future_callback))
-    }
-
-    fn clone_state(&self) -> S {
-        self.as_ref().clone_state()
-    }
-}
-
-impl<M: Message, S: State, N: Node<M, S>> Emitter<M, S> for Arc<N> {
-    fn emit(&self, emitable: S) {
-        self.as_ref().emit(emitable)
+    fn emit_carry(&self, state: S) {
+        if let Some(emitter) = self.emitter() {
+            emitter.emit_carry(self.key().clone(), state)
+        }
     }
 
     fn emit_future<Fu>(&self, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
-        self.as_ref().emit_future(future)
+        if let Some(emitter) = self.emitter() {
+            emitter.emit_future(self.key().clone(), future)
+        }
     }
 }

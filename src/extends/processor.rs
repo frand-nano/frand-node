@@ -1,107 +1,141 @@
 use futures::{future::BoxFuture, stream::{FuturesUnordered, StreamExt}, FutureExt};
 use tokio::{select, sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender}};
-use std::{collections::{HashSet, VecDeque}, ops::Deref, sync::Arc};
+use std::{collections::{HashMap, HashSet, VecDeque}, ops::Deref, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 use crossbeam::channel::{unbounded, Receiver};
 use bases::*;
 use crate::*;
 
 type ProcessorTask<S> = BoxFuture<'static, Result<ContextOrTask<S>>>;
 
-pub struct Processor<S: State> {
-    node: S::Node<S::Message>,
-    consensus: S::Consensus<S::Message>,
-    input_tx: UnboundedSender<PacketMessage<S::Message>>,
-    input_rx: UnboundedReceiver<PacketMessage<S::Message>>,
-    input_future_tx: UnboundedSender<EmitableFuture<S::Message>>,
-    input_future_rx: UnboundedReceiver<EmitableFuture<S::Message>>,
-    output_tx: UnboundedSender<PacketMessage<S::Message>>,
-    output_rx: Option<UnboundedReceiver<PacketMessage<S::Message>>>,
-    context: ProcessorContext<S>,
-    contexts: Vec<ProcessorContext<S>>,
-    tasks: FuturesUnordered<ProcessorTask<S>>,
-    update: fn(&S::Node<S::Message>, S::Message),
+pub struct Processor<A: Accessor> {
+    node: A::Node,
+    input_tx: UnboundedSender<PacketMessage>,
+    input_rx: UnboundedReceiver<PacketMessage>,
+    input_future_tx: UnboundedSender<EmitableFuture>,
+    input_future_rx: UnboundedReceiver<EmitableFuture>,
+    carry_tx: UnboundedSender<PacketMessage>,
+    carry_rx: UnboundedReceiver<PacketMessage>,
+    carrys: HashMap<NodeKey, PacketMessage>,    
+    output_in_use: Arc<AtomicBool>,
+    output_tx: UnboundedSender<PacketMessage>,
+    output_rx: Option<UnboundedReceiver<PacketMessage>>,
+    context: ProcessorContext<A>,
+    contexts: Vec<ProcessorContext<A>>,
+    tasks: FuturesUnordered<ProcessorTask<A>>,
+    update: fn(&A::Node, A::Message, Option<f32>),
 }
 
-pub struct ProcessorContext<S: State> {
-    node: S::Node<S::Message>,
-    consensus: S::Consensus<S::Message>,
+pub struct ProcessorContext<A: Accessor> {
+    process_node: A::Node,
     processed: HashSet<NodeKey>,    
-    process_rx: Receiver<PacketMessage<S::Message>>,
-    process_future_rx: Receiver<EmitableFuture<S::Message>>,
-    output_tx: UnboundedSender<PacketMessage<S::Message>>,
-    packets: VecDeque<PacketMessage<S::Message>>,
-    futures: VecDeque<EmitableFuture<S::Message>>,
-    update: fn(&S::Node<S::Message>, S::Message),
+    process_rx: Receiver<PacketMessage>,
+    process_future_rx: Receiver<EmitableFuture>,
+    output_in_use: Arc<AtomicBool>,
+    output_tx: UnboundedSender<PacketMessage>,
+    packets: VecDeque<PacketMessage>,
+    futures: VecDeque<EmitableFuture>,
+    update: fn(&A::Node, A::Message, Option<f32>),
 }
 
-pub enum ContextOrTask<S: State> {
-    Context(ProcessorContext<S>),
-    Task(ProcessorContext<S>),
+pub enum ContextOrTask<A: Accessor> {
+    Context(ProcessorContext<A>),
+    Task(ProcessorContext<A>),
 }
 
-impl<S: State> Deref for Processor<S> {
-    type Target = S::Node<S::Message>;
+impl<A: Accessor> Deref for Processor<A> {
+    type Target = A::Node;
     fn deref(&self) -> &Self::Target { &self.node }
 }
 
-impl<S: State> Processor<S> {
-    pub fn node(&self) -> &S::Node<S::Message> { &self.node }
-    pub fn input_tx(&self) -> &UnboundedSender<PacketMessage<S::Message>> { &self.input_tx }
-    pub fn input_rx(&self) -> &UnboundedReceiver<PacketMessage<S::Message>> { &self.input_rx }
-    pub fn input_future_tx(&self) -> &UnboundedSender<EmitableFuture<S::Message>> { &self.input_future_tx }
-    pub fn input_future_rx(&self) -> &UnboundedReceiver<EmitableFuture<S::Message>> { &self.input_future_rx }
-    pub fn output_tx(&self) -> &UnboundedSender<PacketMessage<S::Message>> { &self.output_tx }
-    pub fn take_output_rx(&mut self) -> Option<UnboundedReceiver<PacketMessage<S::Message>>> { self.output_rx.take() }
+impl<A: Accessor> Processor<A> 
+where A::Node: Consensus<A::State> {
+    pub fn node(&self) -> &A::Node { &self.node }
+    pub fn input_tx(&self) -> &UnboundedSender<PacketMessage> { &self.input_tx }
+    pub fn input_rx(&self) -> &UnboundedReceiver<PacketMessage> { &self.input_rx }
+    pub fn input_future_tx(&self) -> &UnboundedSender<EmitableFuture> { &self.input_future_tx }
+    pub fn input_future_rx(&self) -> &UnboundedReceiver<EmitableFuture> { &self.input_future_rx }
+    pub fn output_in_use(&self) -> &Arc<AtomicBool> { &self.output_in_use }
+    pub fn output_tx(&self) -> &UnboundedSender<PacketMessage> { &self.output_tx }
+    pub fn take_output_rx(&mut self) -> Option<UnboundedReceiver<PacketMessage>> { 
+        self.output_in_use.store(true, Ordering::Release);
+        self.output_rx.take() 
+    }
 
     pub fn new<F>(
         callback: F,
-        update: fn(&S::Node<S::Message>, S::Message),
+        update: fn(&A::Node, A::Message, Option<f32>),
+    ) -> Self 
+    where F: 'static + Fn(Result<(), MessageError>) + Send + Sync {
+        Self::new_with(A::Node::default(), callback, update)
+    }
+
+    pub fn new_with<F>(
+        mut node: A::Node,
+        callback: F,
+        update: fn(&A::Node, A::Message, Option<f32>),
     ) -> Self 
     where F: 'static + Fn(Result<(), MessageError>) + Send + Sync {
         let (input_tx, input_rx) = unbounded_channel();
         let (input_future_tx, input_future_rx) = unbounded_channel();
+        let (carry_tx, carry_rx) = unbounded_channel();
         let (output_tx, output_rx) = unbounded_channel();
 
         let arc_callback = Arc::new(callback);
 
         let arc_callback_clone = arc_callback.clone();
         let input_tx_clone = input_tx.clone();
-        let callback = move |packet| {
+        let callback = Callback::new(move |packet| {
             arc_callback_clone(input_tx_clone.send(packet).map_err(|err| err.into()))
-        };
+        });
 
         let input_future_tx_clone = input_future_tx.clone();
-        let future_callback = move |future| {
+        let future_callback = FutureCallback::new(move |future| {
             arc_callback(input_future_tx_clone.send(future).map_err(|err| err.into()))
-        };
+        });
 
-        let consensus = S::Consensus::default();
+        let carry_tx_clone = carry_tx.clone();
+        let carry_callback = Callback::new(move |mut packet| {
+            packet.set_carry();
+            carry_tx_clone.send(packet).unwrap()
+        });
+
+        let output_in_use = Arc::new(AtomicBool::new(false));
+
+        let emitter = Emitter::new(
+            &callback, 
+            &future_callback, 
+            &carry_callback,
+        );
+
+        node.set_emitter(Some(&emitter));
 
         Self {
-            node: consensus.new_node(
-                &Callback::new(callback), 
-                &FutureCallback::new(future_callback),
-            ),
             context: ProcessorContext::new(
-                consensus.clone(),
+                node.clone(),
+                carry_tx.clone(),
+                output_in_use.clone(),
                 output_tx.clone(),
                 update,
             ),
-            consensus,
+            node,
             input_tx, input_rx,
             input_future_tx, input_future_rx,
-            output_tx,
-            output_rx: Some(output_rx),
+            carry_tx, carry_rx,
+            carrys: HashMap::new(),
+            output_in_use,
+            output_tx, output_rx: Some(output_rx),
             contexts: Vec::new(),
             tasks: FuturesUnordered::new(),
             update,
         }
     }
 
-    fn pop_context(&mut self) -> ProcessorContext<S> {
+    fn pop_context(&mut self) -> ProcessorContext<A> {
         self.contexts.pop().unwrap_or_else(|| {
             ProcessorContext::new(
-                self.consensus.clone(),
+                self.node.clone(),
+                self.carry_tx.clone(),
+                self.output_in_use.clone(),
                 self.output_tx.clone(),
                 self.update,
             ) 
@@ -109,11 +143,17 @@ impl<S: State> Processor<S> {
     }
 
     #[cfg(feature = "tokio_rt")]
-    pub async fn start(self) -> tokio::task::JoinHandle<()> {
+    pub async fn start(
+        self,
+        tick_delta_secs: f32,
+    ) -> tokio::task::JoinHandle<()> {
+        use tokio::time::{self, Duration};
+
         let mut processor = self;
         tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs_f32(tick_delta_secs));
             loop { 
-                if let Err(err) = processor.process_async().await {
+                if let Err(err) = processor.process_async(&mut interval).await {
                     log::error!("{err}");
                     break;
                 }
@@ -122,32 +162,46 @@ impl<S: State> Processor<S> {
     }
 
     pub fn process(&mut self) -> Result<()> {
-        Ok(while let Ok(packet) = self.input_rx.try_recv() {
+        while let Ok(packet) = self.input_rx.try_recv() {
             self.context.packets.push_back(packet);
             self.context.process()?;
             self.context.processed.clear();
-        })
+        }
+
+        self.transfer_carry_messages()
     }
 
     #[cfg(feature = "tokio_rt")]
-    async fn process_async(&mut self) -> Result<()> {
+    async fn process_async(
+        &mut self, 
+        interval: &mut tokio::time::Interval,
+    ) -> Result<()> {
         select! {
+            _ = interval.tick() => {
+                self.transfer_carry_messages() 
+            }
             Some(packet) = self.input_rx.recv() => {
                 let mut context = self.pop_context();
                 context.packets.push_back(packet);
+                
                 self.tasks.push(context.process_async().boxed());
+
                 Ok(()) 
             }
             Some(future) = self.input_future_rx.recv() => {
                 let mut context = self.pop_context();
                 context.futures.push_back(future);
+
                 self.tasks.push(context.process_async().boxed());
+
                 Ok(()) 
             }
             Some(task) = self.tasks.next() => {
                 match task? {
                     ContextOrTask::Context(context) => self.contexts.push(context),
-                    ContextOrTask::Task(task) => self.tasks.push(task.process_async().boxed()),
+                    ContextOrTask::Task(task) => {
+                        self.tasks.push(task.process_async().boxed())
+                    },
                 }
                 Ok(())
             }
@@ -156,36 +210,55 @@ impl<S: State> Processor<S> {
             ))) 
         }
     }
+
+    fn transfer_carry_messages(&mut self) -> Result<()> {        
+        while let Ok(packet) = self.carry_rx.try_recv() {
+            self.carrys.insert(packet.key().clone(), packet);
+        }
+
+        for (_, packet) in self.carrys.drain() {
+            self.input_tx.send(packet)?;
+        }
+
+        Ok(())
+    }
 }
 
-impl<S: State> ProcessorContext<S> {
-    pub fn node(&self) -> &S::Node<S::Message> { &self.node }
-
+impl<A: Accessor> ProcessorContext<A> 
+where A::Node: Consensus<A::State> {
     fn new(
-        consensus: S::Consensus<S::Message>,
-        output_tx: UnboundedSender<PacketMessage<S::Message>>,
-        update: fn(&S::Node<S::Message>, S::Message),
+        node: A::Node,
+        carry_tx: UnboundedSender<PacketMessage>,
+        output_in_use: Arc<AtomicBool>,
+        output_tx: UnboundedSender<PacketMessage>,
+        update: fn(&A::Node, A::Message, Option<f32>),
     ) -> Self {
         let (process_tx, process_rx) = unbounded();
         let (process_future_tx, process_future_rx) = unbounded();
 
-        let callback = move |packet| {
+        let callback = Callback::new(move |packet| {
             process_tx.send(packet).unwrap()
-        };
+        });
 
-        let future_callback = move |future| {
+        let future_callback = FutureCallback::new(move |future| {
             process_future_tx.send(future).unwrap()
-        };
+        });
+
+        let carry_callback = Callback::new(move |mut packet| {
+            packet.set_carry();
+            carry_tx.send(packet).unwrap()
+        });
 
         Self {
-            node: consensus.new_node(
-                &Callback::new(callback), 
-                &FutureCallback::new(future_callback),
-            ),
-            consensus,
+            process_node: Consensus::new_from(&node, Some(&Emitter::new(
+                &callback, 
+                &future_callback, 
+                &carry_callback,
+            ))),
             processed: HashSet::new(),
             process_rx,          
-            process_future_rx,          
+            process_future_rx,        
+            output_in_use,
             output_tx,
             packets: VecDeque::new(),
             futures: VecDeque::new(),
@@ -196,24 +269,32 @@ impl<S: State> ProcessorContext<S> {
     fn process(&mut self) -> Result<()> {
         Ok(while let Some(mut packet) = self.packets.pop_front() {
             loop {
-                if !self.processed.contains(&packet.header) {
-                    self.processed.insert(packet.header.clone());
-        
-                    self.consensus.apply(packet.message.clone());
+                if !self.processed.contains(packet.key()) {
+                    self.processed.insert(packet.key().clone());
+                    
+                    let delta = packet.carry().map(|carry| {
+                        carry.elapsed().as_secs_f32()
+                    });
 
-                    self.output_tx.send(packet.clone())?;
-        
-                    (self.update)(self.node(), packet.message);
+                    let message = A::Message::from_packet_message(&packet, 0)?;
+
+                    self.process_node.apply(message.clone());
+
+                    if self.output_in_use.load(Ordering::Acquire) {
+                        self.output_tx.send(packet)?;
+                    }
+
+                    (self.update)(&self.process_node, message, delta);
                 }          
                 match self.process_rx.try_recv() {
-                    Ok(next) => packet = next,
+                    Ok(recv) => packet = recv,
                     _ => break,
-                }  
+                } 
             }
         })
     }
 
-    async fn process_async(mut self) -> Result<ContextOrTask<S>> {
+    async fn process_async(mut self) -> Result<ContextOrTask<A>> {
         self.process()?;
 
         while let Ok(future) = self.process_future_rx.try_recv() {
@@ -225,15 +306,16 @@ impl<S: State> ProcessorContext<S> {
                 if !self.processed.contains(&future.0) {
                     self.processed.insert(future.0.clone());
         
-                    let message = future.1.await;
-                    self.consensus.apply(message.clone());
-    
-                    self.output_tx.send(PacketMessage {
-                        header: future.0,
-                        message: message.clone(),
-                    })?;
-        
-                    (self.update)(self.node(), message);
+                    let packet = future.1.await;
+                    let message = A::Message::from_packet_message(&packet, 0)?;
+
+                    self.process_node.apply(message.clone());
+            
+                    if self.output_in_use.load(Ordering::Acquire) {
+                        self.output_tx.send(packet)?;
+                    }
+
+                    (self.update)(&self.process_node, message, None);
                 }
 
                 let packet = self.process_rx.try_recv();
