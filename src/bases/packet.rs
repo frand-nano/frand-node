@@ -1,35 +1,31 @@
-use std::{fmt::Debug, io::Cursor, time::Instant};
+use std::{fmt::Debug, io::Cursor, ops::{Add, Sub}, time::Instant};
 use serde::{de::DeserializeOwned, Serialize};
 use super::*;
 
-pub type NodeId = u32;
-pub type NodeKey = Box<[NodeId]>;
-
-pub type Header = NodeKey;
+pub type Index = u32;
 pub type Payload = Box<[u8]>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Key(u64, u64);
 
 #[derive(Debug, Clone)]
 pub struct Packet {
-    header: Header,
+    key: Key,
     payload: Payload,
 }
 
 #[derive(Debug)]
 pub struct PacketMessage {
-    header: Header,
+    key: Key,
     payload: Box<dyn Emitable>,
     carry: Option<Instant>, 
 }
 
 impl Packet {
-    pub fn key(&self) -> &NodeKey { &self.header }
-
-    pub fn get_id(&self, depth: usize) -> Option<NodeId> { 
-        self.key().get(depth).copied()
-    }
+    pub fn key(&self) -> Key { self.key }
 
     pub fn new<S: State + Serialize>(
-        node_key: NodeKey, 
+        key: Key, 
         state: &S,
     ) -> Self {
         let mut buffer = Vec::new();
@@ -40,7 +36,7 @@ impl Packet {
         );
 
         Packet {
-            header: node_key,
+            key,
             payload: buffer.into_boxed_slice(),
         }      
     }
@@ -54,32 +50,28 @@ impl Packet {
     
     pub fn error(
         &self, 
-        depth: usize,
+        index: Option<Index>,
         message: impl AsRef<str>,
     ) -> PacketError {
-        PacketError::new(self.clone(), depth, message)
+        PacketError::new(self.clone(), index, message)
     }
 }
 
 impl PacketMessage {
-    pub fn key(&self) -> &NodeKey { &self.header }
+    pub fn key(&self) -> Key { self.key }
     pub fn payload(&self) -> &Box<dyn Emitable> { &self.payload }
     pub fn carry(&self) -> &Option<Instant> { &self.carry }
-
-    pub fn get_id(&self, depth: usize) -> Option<NodeId> { 
-        self.header.get(depth).copied()
-    }
 
     pub fn set_carry(&mut self) { 
         self.carry = Some(Instant::now()); 
     }
 
     pub fn new(
-        node_key: NodeKey, 
+        key: Key, 
         payload: Box<dyn Emitable>,
     ) -> Self {
         Self {
-            header: node_key,
+            key,
             payload,
             carry: None,
         } 
@@ -87,8 +79,53 @@ impl PacketMessage {
 
     pub unsafe fn to_packet<S: State>(&self) -> Packet {
         Packet::new::<S>(
-            self.header.clone(), 
+            self.key, 
             &S::from_emitable(&self.payload)
         )
+    }
+}
+
+impl From<u128> for Key {
+    fn from(value: u128) -> Self {
+        Self((value >> 64) as u64, value as u64)
+    }
+}
+
+impl From<Key> for u128 {
+    fn from(value: Key) -> Self {
+        (value.0 as u128) << 64 | (value.1 as u128)
+    }
+}
+
+impl From<Key> for (u64, u64) {
+    fn from(value: Key) -> Self {
+        (value.0, value.1)
+    }
+}
+
+impl Add<Index> for Key {
+    type Output = Self;
+    fn add(self, rhs: Index) -> Self::Output {
+        let mut combined: u128 = self.into();
+        combined = combined.checked_add(rhs as u128).unwrap();
+        combined.into()
+    }
+}
+
+impl Sub<Index> for Key {
+    type Output = Self;
+    fn sub(self, rhs: Index) -> Self::Output {
+        let mut combined: u128 = self.into();
+        combined = combined.checked_sub(rhs as u128).unwrap();
+        combined.into()
+    }
+}
+
+impl Sub for Key {
+    type Output = Index;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let mut combined: u128 = self.into();
+        combined = combined.checked_sub(rhs.into()).unwrap();
+        combined.try_into().unwrap()
     }
 }

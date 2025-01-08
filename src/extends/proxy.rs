@@ -10,7 +10,7 @@ pub struct Proxy<A: Accessor>(PhantomData<A>);
 #[derive(Debug, Clone)]
 pub struct ProxyNode<A: Accessor<State = S>, S: State>{
     _phantom: PhantomData<A>,
-    key: NodeKey,
+    key: Key,
     emitter: Option<Emitter>,
     subject: OnceCell<S::Node>,
 }
@@ -30,6 +30,8 @@ impl<A: Accessor<State = S>, S: State> Accessor for Proxy<A> {
 impl<A: Accessor> Emitable for Proxy<A> {}
 
 impl<A: Accessor> State for Proxy<A> {
+    const NODE_SIZE: Index = 1; 
+
     fn apply(
         &mut self,  
         _message: Self::Message,
@@ -49,7 +51,7 @@ impl<A: Accessor<State = S>, S: State> ProxyNode<A, S> {
 }
 
 impl<A: Accessor<State = S>, S: State> Default for ProxyNode<A, S> {
-    fn default() -> Self { Self::new(vec![], None, None) }
+    fn default() -> Self { Self::new(0.into(), 0, None) }
 }
 
 impl<A: Accessor<State = S>, S: State> Accessor for ProxyNode<A, S> {
@@ -70,7 +72,7 @@ where Proxy<A>: State<Message = ()> {
 
 impl<A: Accessor<State = S>, S: State> Node<Proxy<A>> for ProxyNode<A, S> 
 where Proxy<A>: State<Message = ()> {    
-    fn key(&self) -> &NodeKey { &self.key }
+    fn key(&self) -> Key { self.key }
     fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
     fn clone_state(&self) -> Proxy<A> { Default::default() }
 }
@@ -78,15 +80,15 @@ where Proxy<A>: State<Message = ()> {
 impl<A: Accessor<State = S>, S: State> NewNode<Proxy<A>> for ProxyNode<A, S> 
 where Proxy<A>: State<Message = ()> {    
     fn new(
-        mut key: Vec<NodeId>,
-        id: Option<NodeId>,
+        mut key: Key,
+        index: Index,
         emitter: Option<&Emitter>,
     ) -> Self {        
-        if let Some(id) = id { key.push(id); }
+        key = key + index;
         
         Self { 
             _phantom: Default::default(),
-            key: key.clone().into_boxed_slice(),   
+            key,   
             emitter: emitter.cloned(),
             subject: OnceCell::new(),
         }

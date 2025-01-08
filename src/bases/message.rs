@@ -3,17 +3,17 @@ use super::*;
 
 pub trait Message: 'static + Debug + Clone + Sized + Send + Sync {   
     fn from_packet_message(
+        parent_key: Key,
         packet: &PacketMessage, 
-        depth: usize, 
     ) -> Result<Self, MessageError>;
 
     fn from_packet(
+        parent_key: Key,
         packet: &Packet, 
-        depth: usize, 
     ) -> Result<Self, PacketError>;
 
     fn to_packet(
         &self,
-        header: &Header, 
+        key: Key, 
     ) -> Result<Packet, MessageError>;
 }

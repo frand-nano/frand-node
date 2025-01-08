@@ -21,15 +21,15 @@ impl Emitter {
         }
     }
 
-    pub fn emit<S: State>(&self, key: NodeKey, state: S) {
+    pub fn emit<S: State>(&self, key: Key, state: S) {
         self.callback.emit(key, state)
     }
 
-    pub fn emit_carry<S: State>(&self, key: NodeKey, state: S) {
+    pub fn emit_carry<S: State>(&self, key: Key, state: S) {
         self.carry_callback.emit(key, state)
     }
 
-    pub fn emit_future<S: State, Fu>(&self, key: NodeKey, future: Fu) 
+    pub fn emit_future<S: State, Fu>(&self, key: Key, future: Fu) 
     where Fu: 'static + Future<Output = S> + Send {
         self.future_callback.emit(key, future)
     }

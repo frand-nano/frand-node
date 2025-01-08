@@ -2,7 +2,7 @@ use std::{any::type_name_of_val, future::Future, sync::Arc};
 use futures::{future::BoxFuture, FutureExt};
 use super::*;
 
-pub type EmitableFuture = (NodeKey, BoxFuture<'static, PacketMessage>);
+pub type EmitableFuture = (Key, BoxFuture<'static, PacketMessage>);
 
 #[derive(Clone)]
 pub struct Callback(Arc<dyn Fn(PacketMessage) + Send + Sync>);
@@ -30,11 +30,11 @@ impl Callback {
 
     pub fn emit<S: State>(
         &self, 
-        node_key: NodeKey, 
+        key: Key, 
         state: S,
     ) {
         (self.0)(
-            PacketMessage::new(node_key, Box::new(state))                
+            PacketMessage::new(key, Box::new(state))                
         )
     }
 }
@@ -47,12 +47,12 @@ impl FutureCallback {
 
     pub fn emit<S: State, Fu>(
         &self, 
-        node_key: NodeKey, 
+        key: Key, 
         future: Fu,
     ) where Fu: 'static + Future<Output = S> + Send {
         (self.0)(
-            (node_key.clone(), async move {
-                PacketMessage::new(node_key, Box::new(future.await))
+            (key, async move {
+                PacketMessage::new(key, Box::new(future.await))
             }.boxed())                
         )
     }

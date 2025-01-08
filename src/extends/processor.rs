@@ -1,6 +1,7 @@
 use futures::{future::BoxFuture, stream::{FuturesUnordered, StreamExt}, FutureExt};
+use rustc_hash::FxHasher;
 use tokio::{select, sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender}};
-use std::{collections::{HashMap, HashSet, VecDeque}, ops::Deref, sync::{atomic::{AtomicBool, Ordering}, Arc}};
+use std::{collections::{HashMap, HashSet, VecDeque}, hash::BuildHasherDefault, ops::Deref, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 use crossbeam::channel::{unbounded, Receiver};
 use bases::*;
 use crate::*;
@@ -15,7 +16,7 @@ pub struct Processor<A: Accessor> {
     input_future_rx: UnboundedReceiver<EmitableFuture>,
     carry_tx: UnboundedSender<PacketMessage>,
     carry_rx: UnboundedReceiver<PacketMessage>,
-    carrys: HashMap<NodeKey, PacketMessage>,    
+    carrys: HashMap<Key, PacketMessage, BuildHasherDefault<FxHasher>>,    
     output_in_use: Arc<AtomicBool>,
     output_tx: UnboundedSender<PacketMessage>,
     output_rx: Option<UnboundedReceiver<PacketMessage>>,
@@ -27,7 +28,7 @@ pub struct Processor<A: Accessor> {
 
 pub struct ProcessorContext<A: Accessor> {
     process_node: A::Node,
-    processed: HashSet<NodeKey>,    
+    processed: HashSet<Key, BuildHasherDefault<FxHasher>>,    
     process_rx: Receiver<PacketMessage>,
     process_future_rx: Receiver<EmitableFuture>,
     output_in_use: Arc<AtomicBool>,
@@ -121,7 +122,7 @@ where A::Node: Consensus<A::State> {
             input_tx, input_rx,
             input_future_tx, input_future_rx,
             carry_tx, carry_rx,
-            carrys: HashMap::new(),
+            carrys: HashMap::default(),
             output_in_use,
             output_tx, output_rx: Some(output_rx),
             contexts: Vec::new(),
@@ -213,7 +214,7 @@ where A::Node: Consensus<A::State> {
 
     fn transfer_carry_messages(&mut self) -> Result<()> {        
         while let Ok(packet) = self.carry_rx.try_recv() {
-            self.carrys.insert(packet.key().clone(), packet);
+            self.carrys.insert(packet.key(), packet);
         }
 
         for (_, packet) in self.carrys.drain() {
@@ -255,7 +256,7 @@ where A::Node: Consensus<A::State> {
                 &future_callback, 
                 &carry_callback,
             ))),
-            processed: HashSet::new(),
+            processed: HashSet::default(),
             process_rx,          
             process_future_rx,        
             output_in_use,
@@ -269,14 +270,14 @@ where A::Node: Consensus<A::State> {
     fn process(&mut self) -> Result<()> {
         Ok(while let Some(mut packet) = self.packets.pop_front() {
             loop {
-                if !self.processed.contains(packet.key()) {
-                    self.processed.insert(packet.key().clone());
+                if !self.processed.contains(&packet.key()) {
+                    self.processed.insert(packet.key());
                     
                     let delta = packet.carry().map(|carry| {
                         carry.elapsed().as_secs_f32()
                     });
 
-                    let message = A::Message::from_packet_message(&packet, 0)?;
+                    let message = A::Message::from_packet_message(0.into(), &packet)?;
 
                     self.process_node.apply(message.clone());
 
@@ -303,11 +304,11 @@ where A::Node: Consensus<A::State> {
 
         Ok(match self.futures.pop_front() {
             Some(future) => {
-                if !self.processed.contains(&future.0) {
-                    self.processed.insert(future.0.clone());
+                if !self.processed.contains(&future.0.into()) {
+                    self.processed.insert(future.0.into());
         
                     let packet = future.1.await;
-                    let message = A::Message::from_packet_message(&packet, 0)?;
+                    let message = A::Message::from_packet_message(0.into(), &packet)?;
 
                     self.process_node.apply(message.clone());
             

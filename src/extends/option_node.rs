@@ -3,8 +3,8 @@ use bases::*;
 use extends::AtomicNode;
 use crate::*;
 
-const IS_SOME_ID: NodeId = 0;
-const ITEM_ID: NodeId = 1;
+const IS_SOME_INDEX: Index = 1;
+const ITEM_INDEX: Index = 2;
 
 #[derive(Debug, Clone)]
 pub enum OptionMessage<A: Accessor> {
@@ -15,7 +15,7 @@ pub enum OptionMessage<A: Accessor> {
 
 #[derive(Debug, Clone)]
 pub struct OptionNode<A: Accessor> { 
-    key: NodeKey,
+    key: Key,
     emitter: Option<Emitter>,
     pub is_some: AtomicNode<bool, Arc<AtomicBool>>, 
     item: A::Node,
@@ -30,6 +30,8 @@ impl<A: Accessor> Accessor for Option<A> {
 impl<S: State> Emitable for Option<S> {}
 
 impl<S: State> State for Option<S> {
+    const NODE_SIZE: Index = 1 + <bool as State>::NODE_SIZE + S::NODE_SIZE; 
+
     fn apply(
         &mut self,  
         message: Self::Message,
@@ -53,54 +55,60 @@ impl<S: State> State for Option<S> {
 
 impl<S: State> Message for OptionMessage<S> {
     fn from_packet_message(
+        parent_key: Key,
         packet: &PacketMessage, 
-        depth: usize, 
-    ) -> Result<Self, MessageError> {                    
-        match packet.get_id(depth) {
-            Some(IS_SOME_ID) => Ok(Self::IsSome(
-                <bool as Accessor>::Message::from_packet_message(packet, depth + 1)?
-            )),
-            Some(ITEM_ID) => Ok(Self::Item(
-                S::Message::from_packet_message(packet, depth + 1).ok()
-            )),
-            Some(_) => Err(MessageError::new(
-                packet.key().clone(),
-                depth,
-                "unknown id",
-            )),
-            None => Ok(Self::State(unsafe { 
+    ) -> Result<Self, MessageError> {     
+        match packet.key() - parent_key {
+            0 => Ok(Self::State(unsafe { 
                 State::from_emitable(packet.payload()) 
             })),
+            IS_SOME_INDEX => Ok(Self::IsSome(
+                <bool as Accessor>::Message::from_packet_message(
+                    parent_key + IS_SOME_INDEX,
+                    packet, 
+                )?
+            )),
+            _ => Ok(Self::Item(
+                S::Message::from_packet_message(
+                    parent_key + ITEM_INDEX,
+                    packet,
+                ).ok()
+            )),
         }
     }
 
     fn from_packet(
+        parent_key: Key,
         packet: &Packet, 
-        depth: usize, 
-    ) -> Result<Self, PacketError> {                    
-        match packet.get_id(depth) {
-            Some(IS_SOME_ID) => Ok(Self::IsSome(<bool as Accessor>::Message::from_packet(packet, depth + 1)?)),
-            Some(ITEM_ID) => Ok(Self::Item(S::Message::from_packet(packet, depth + 1).ok())),
-            Some(_) => Err(PacketError::new(
-                packet.clone(),
-                depth,
-                "unknown id",
-            )),
-            None => Ok(Self::State(
+    ) -> Result<Self, PacketError> {        
+        match packet.key() - parent_key {
+            0 => Ok(Self::State(
                 packet.read_state()
+            )),
+            IS_SOME_INDEX => Ok(Self::IsSome(
+                <bool as Accessor>::Message::from_packet(
+                    parent_key + IS_SOME_INDEX,
+                    packet, 
+                )?
+            )),
+            _ => Ok(Self::Item(
+                S::Message::from_packet(
+                    parent_key + ITEM_INDEX,
+                    packet,
+                ).ok()
             )),
         }
     }
 
     fn to_packet(
         &self,
-        header: &Header, 
+        key: Key, 
     ) -> Result<Packet, MessageError> {
         match self {
-            Self::Item(Some(message)) => message.to_packet(header),
-            Self::Item(None) => Ok(Packet::new(header.clone(), &())),
-            Self::IsSome(is_some) => Ok(Packet::new(header.clone(), is_some)),
-            Self::State(state) => Ok(Packet::new(header.clone(), state)),
+            Self::Item(Some(message)) => message.to_packet(key),
+            Self::Item(None) => Ok(Packet::new(key, &())),
+            Self::IsSome(is_some) => Ok(Packet::new(key, is_some)),
+            Self::State(state) => Ok(Packet::new(key, state)),
         }
     }
 }
@@ -116,7 +124,7 @@ impl<S: State> OptionNode<S> {
 
 impl<S: State> Default for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {    
-    fn default() -> Self { Self::new(vec![], None, None) }
+    fn default() -> Self { Self::new(0.into(), 0, None) }
 }
 
 impl<S: State> Accessor for OptionNode<S>  {
@@ -145,7 +153,7 @@ impl<S: State> System for OptionNode<S> {
 
 impl<S: State> Node<Option<S>> for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {  
-    fn key(&self) -> &NodeKey { &self.key }
+    fn key(&self) -> Key { self.key }
     fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
 
     fn clone_state(&self) -> Option<S> { 
@@ -159,17 +167,17 @@ where Option<S>: State<Message = OptionMessage<S>> {
 impl<S: State> NewNode<Option<S>> for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {  
     fn new(
-        mut key: Vec<NodeId>,
-        id: Option<NodeId>,
+        mut key: Key,
+        index: Index,
         emitter: Option<&Emitter>,
     ) -> Self {        
-        if let Some(id) = id { key.push(id); }
+        key = key + index;
         
         Self { 
-            key: key.clone().into_boxed_slice(),   
+            key,   
             emitter: emitter.cloned(),
-            is_some: NewNode::new(key.clone(), Some(IS_SOME_ID), emitter),
-            item: NewNode::new(key.clone(), Some(ITEM_ID), emitter),
+            is_some: NewNode::new(key, IS_SOME_INDEX, emitter),
+            item: NewNode::new(key, ITEM_INDEX, emitter),
         }
     }
 }
@@ -184,7 +192,7 @@ Option<S>: State<Message = OptionMessage<S>>,
         emitter: Option<&Emitter>,
     ) -> Self {
         Self {
-            key: node.key.clone(),
+            key: node.key,
             emitter: emitter.cloned(),
             is_some: Consensus::new_from(&node.is_some, emitter),
             item: Consensus::new_from(&node.item, emitter),

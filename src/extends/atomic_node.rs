@@ -4,7 +4,7 @@ use crate::bases::*;
 #[derive(Debug, Clone)]
 pub struct AtomicNode<S: State, A: AtomicState<S>> {
     _phantom: PhantomData<S>,
-    key: NodeKey,
+    key: Key,
     emitter: Option<Emitter>,
     state: A,   
 }
@@ -15,7 +15,7 @@ impl<S: State, A: AtomicState<S>> AtomicNode<S, A> {
 
 impl<S: State + Message, A: AtomicState<S>> Default for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {
-    fn default() -> Self { Self::new(vec![], None, None) }
+    fn default() -> Self { Self::new(0.into(), 0, None) }
 }
 
 impl<S: State + Message, A: AtomicState<S>> Accessor for AtomicNode<S, A> 
@@ -37,23 +37,23 @@ where S: State<Message = S, Node = Self> {
 
 impl<S: State + Message, A: AtomicState<S>> Node<S> for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {  
-    fn key(&self) -> &NodeKey { &self.key }
+    fn key(&self) -> Key { self.key }
     fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-    fn clone_state(&self) -> S { self.v() } 
+    fn clone_state(&self) -> S { self.v() }    
 }
 
 impl<S: State + Message, A: AtomicState<S>> NewNode<S> for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {  
     fn new(
-        mut key: Vec<NodeId>,
-        id: Option<NodeId>,
+        mut key: Key,
+        index: Index,
         emitter: Option<&Emitter>,
     ) -> Self {
-        if let Some(id) = id { key.push(id); }
+        key = key + index;
         
         Self { 
             _phantom: Default::default(),
-            key: key.into_boxed_slice(), 
+            key, 
             emitter: emitter.cloned(),
             state: AtomicState::new(Default::default()),
         }
@@ -68,7 +68,7 @@ where S: State<Message = S, Node = Self> {
     ) -> Self {
         Self {
             _phantom: Default::default(),
-            key: node.key.clone(),
+            key: node.key,
             emitter: emitter.cloned(),
             state: node.state.clone(),
         }
@@ -91,6 +91,8 @@ macro_rules! impl_atomic_state_for {
             impl Emitable for $tys {}
 
             impl State for $tys {
+                const NODE_SIZE: Index = 1; 
+
                 fn apply(
                     &mut self,  
                     message: Self::Message,

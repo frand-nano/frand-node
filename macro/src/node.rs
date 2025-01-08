@@ -1,9 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::*;
-use quote::quote;
+use quote::{quote, ToTokens};
 use convert_case::{Case, Casing};
-
-pub type NodeId = u32;
 
 pub fn expand(
     mut state: ItemStruct,
@@ -25,13 +23,22 @@ pub fn expand(
         node_name.span(),
     );
 
+    let node_index_starts_name = Ident::new(
+        &format!("{}IndexStarts", node_name.to_string()).to_case(Case::Snake), 
+        node_name.span(),
+    );
+
+    let node_index_ends_name = Ident::new(
+        &format!("{}IndexEnds", node_name.to_string()).to_case(Case::Snake), 
+        node_name.span(),
+    );
+
     let fields: Vec<&Field> = match &state.fields {
         Fields::Named(fields_named) => fields_named.named.iter().collect(),
         _ => unimplemented!("not supported"),
     };  
 
     let viss: Vec<_> = fields.iter().map(|field| &field.vis).collect();
-    let indexes: Vec<_> = (0..fields.len() as NodeId).into_iter().collect();
     let names: Vec<_> = fields.iter().filter_map(|field| field.ident.as_ref()).collect();
     let tys: Vec<_> = fields.iter().map(|field| &field.ty).collect();
 
@@ -44,6 +51,15 @@ pub fn expand(
         })        
     ).collect();
 
+    let upper_snake_names: Vec<_> = fields.iter().filter_map(|field| 
+        field.ident.as_ref().map(|name| {
+            Ident::new(
+                &name.to_string().to_case(Case::UpperSnake), 
+                name.span(),
+            )
+        })        
+    ).collect();
+
     let message_tys: Vec<_> = tys.iter().map(|ty| 
         quote!{ <#ty as #mp::Accessor>::Message }
     ).collect();
@@ -51,6 +67,24 @@ pub fn expand(
     let node_tys: Vec<_> = tys.iter().map(|ty| 
         quote!{ <#ty as #mp::Accessor>::Node }
     ).collect();
+
+    let node_sizes: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <<#ty as #mp::Accessor>::State as #mp::State>::NODE_SIZE }
+    ).collect();
+
+    let node_indexes: Vec<_> = (0..fields.len()).into_iter()
+    .map(|index| {
+        let mut tokens = quote!{1};
+
+        for i in 0..index {
+            let node_size = &node_sizes[i];
+            quote!{
+                + #node_size
+            }.to_tokens(&mut tokens);
+        }
+
+        tokens
+    }).collect(); 
 
     let state_attrs = state.attrs;
     let state_generics = state.generics;
@@ -76,9 +110,19 @@ pub fn expand(
 
         #[derive(Debug, Clone)]
         #vis struct #node_name {
-            key: #mp::NodeKey,
+            key: #mp::Key,
             emitter: Option<#mp::Emitter>,
             #(#viss #names: #node_tys,)*
+        }
+
+        mod #node_index_starts_name {
+            #[allow(unused_imports)] use super::*;
+            #(pub const #upper_snake_names: #mp::Index = #node_indexes;)*
+        }
+
+        mod #node_index_ends_name {
+            #[allow(unused_imports)] use super::*;
+            #(pub const #upper_snake_names: #mp::Index = #node_indexes + #node_sizes;)*
         }
 
         impl #mp::Accessor for #state_name  {
@@ -90,6 +134,8 @@ pub fn expand(
         impl #mp::Emitable for #state_name {}
 
         impl #mp::State for #state_name {
+            const NODE_SIZE: #mp::Index = 1 #(+ #node_sizes)*;
+
             fn apply(
                 &mut self,  
                 message: Self::Message,
@@ -103,56 +149,62 @@ pub fn expand(
 
         impl #mp::Message for #message_name {
             fn from_packet_message(
+                parent_key: #mp::Key,
                 packet: &#mp::PacketMessage, 
-                depth: usize, 
             ) -> core::result::Result<Self, #mp::MessageError> {      
-                match packet.get_id(depth) {
-                    #(Some(#indexes) => Ok(#message_name::#pascal_names(
-                        #message_tys::from_packet_message(packet, depth + 1)?
-                    )),)*
-                    Some(_) => Err(#mp::MessageError::new(
-                        packet.key().clone(),
-                        depth,
-                        "unknown id",
-                    )),
-                    None => Ok(Self::State(unsafe { 
+                match packet.key() - parent_key {
+                    0 => Ok(Self::State(unsafe { 
                         #mp::State::from_emitable(packet.payload()) 
                     })),
+                    #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(#message_name::#pascal_names(
+                        #message_tys::from_packet_message(
+                            parent_key + #node_index_starts_name::#upper_snake_names, 
+                            packet,
+                        )?
+                    )),)*
+                    index => Err(#mp::MessageError::new(
+                        packet.key(),
+                        Some(index),
+                        format!("{}: unknown index", std::any::type_name::<Self>()),
+                    )),
                 }    
             } 
 
             fn from_packet(
+                parent_key: #mp::Key,
                 packet: &#mp::Packet, 
-                depth: usize, 
             ) -> core::result::Result<Self, #mp::PacketError> {
-                Ok(match packet.get_id(depth) {
-                    #(Some(#indexes) => Ok(
-                        #message_name::#pascal_names(#message_tys::from_packet(packet, depth + 1)?)
-                    ),)*
-                    Some(_) => Err(#mp::PacketError::new(
-                        packet.clone(),
-                        depth,
-                        "unknown id",
-                    )),
-                    None => Ok(Self::State(
+                Ok(match packet.key() - parent_key {
+                    0 => Ok(Self::State(
                         packet.read_state()
+                    )),
+                    #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(
+                        #message_name::#pascal_names(#message_tys::from_packet(
+                            parent_key + #node_index_starts_name::#upper_snake_names, 
+                            packet, 
+                        )?)
+                    ),)*
+                    index => Err(#mp::PacketError::new(
+                        packet.clone(),
+                        Some(index),
+                        format!("{}: unknown index", std::any::type_name::<Self>()),
                     )),
                 }?)     
             }
 
             fn to_packet(
                 &self,
-                header: &#mp::Header, 
+                key: #mp::Key, 
             ) -> core::result::Result<#mp::Packet, #mp::MessageError> {       
                 match self {
-                    #(Self::#pascal_names(message) => message.to_packet(header),)*
-                    Self::State(state) => Ok(#mp::Packet::new(header.clone(), state)),
+                    #(Self::#pascal_names(message) => message.to_packet(key),)*
+                    Self::State(state) => Ok(#mp::Packet::new(key, state)),
                 }
             }
         }
 
         impl Default for #node_name { 
-            fn default() -> Self { Self::new(vec![], None, None) }
+            fn default() -> Self { Self::new(0.into(), 0, None) }
         }
 
         impl #mp::Accessor for #node_name  {
@@ -171,7 +223,7 @@ pub fn expand(
         }
         
         impl #mp::Node<#state_name> for #node_name { 
-            fn key(&self) -> &#mp::NodeKey { &self.key }
+            fn key(&self) -> #mp::Key { self.key }
             fn emitter(&self) -> Option<&#mp::Emitter> { self.emitter.as_ref() }
 
             fn clone_state(&self) -> #state_name { 
@@ -183,17 +235,17 @@ pub fn expand(
         
         impl #mp::NewNode<#state_name> for #node_name { 
             fn new(
-                mut key: Vec<#mp::NodeId>,
-                id: Option<#mp::NodeId>,
+                mut key: #mp::Key,
+                index: #mp::Index,
                 emitter: Option<&#mp::Emitter>,
             ) -> Self {
-                if let Some(id) = id { key.push(id); }
+                key = key + index;
 
                 Self { 
-                    key: key.clone().into_boxed_slice(),   
+                    key,   
                     emitter: emitter.cloned(),
                     #(#names: #mp::NewNode::new(
-                        key.clone(), Some(#indexes), emitter,
+                        key, #node_index_starts_name::#upper_snake_names, emitter,
                     ),)*
                 }
             }
@@ -205,7 +257,7 @@ pub fn expand(
                 emitter: Option<&#mp::Emitter>,
             ) -> Self {
                 Self {
-                    key: node.key.clone(),
+                    key: node.key,
                     emitter: emitter.cloned(),
                     #(#names: #mp::Consensus::new_from(&node.#names, emitter),)*
                 }

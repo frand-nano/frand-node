@@ -3,7 +3,7 @@ use crate::bases::*;
 
 #[derive(Debug, Clone)]
 pub struct TerminalNode<S: State> {
-    key: NodeKey,
+    key: Key,
     emitter: Option<Emitter>,
     state: Arc<RwLock<S>>,    
 }
@@ -19,7 +19,7 @@ impl<S: State> TerminalNode<S> {
 
 impl<S: State + Message> Default for TerminalNode<S> 
 where S: State<Message = S> {    
-    fn default() -> Self { Self::new(vec![], None, None) }
+    fn default() -> Self { Self::new(0.into(), 0, None) }
 }
 
 impl<S: State + Message> Accessor for TerminalNode<S>  
@@ -41,7 +41,7 @@ where S: State<Message = S> {
 
 impl<S: State + Message> Node<S> for TerminalNode<S> 
 where S: State<Message = S> {    
-    fn key(&self) -> &NodeKey { &self.key }
+    fn key(&self) -> Key { self.key }
     fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
     fn clone_state(&self) -> S { self.read().clone() }
 }
@@ -49,14 +49,14 @@ where S: State<Message = S> {
 impl<S: State + Message> NewNode<S> for TerminalNode<S> 
 where S: State<Message = S> {    
     fn new(
-        mut key: Vec<NodeId>,
-        id: Option<NodeId>,
+        mut key: Key,
+        index: Index,
         emitter: Option<&Emitter>,
     ) -> Self {
-        if let Some(id) = id { key.push(id); }
+        key = key + index;
         
         Self { 
-            key: key.into_boxed_slice(),   
+            key,   
             emitter: emitter.cloned(),
             state: Default::default(),
         }
