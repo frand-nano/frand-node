@@ -45,23 +45,23 @@ where S::Node: Consensus<S> {
 }
 
 #[derive(Debug, Clone)]
-pub enum VecMessage<S: State> {
-    Item((NodeId, S::Message)),
-    Push(S),
+pub enum VecMessage<A: Accessor> {
+    Item((NodeId, A::Message)),
+    Push(A::State),
     Pop(()),
-    State(Vec<S>),
+    State(Vec<A::State>),
 }
 
 #[derive(Debug, Clone)]
-pub struct VecNode<S: State> {
+pub struct VecNode<A: Accessor> {
     key: NodeKey,
     push: NodeKey,
     pop: NodeKey, 
     emitter: Option<Emitter>,
     consensus_emitter: Option<Emitter>,
     len: Arc<RwLock<NodeId>>,
-    consensus_items: Arc<RwLock<Vec<S::Node>>>,
-    items: Arc<RwLock<Vec<S::Node>>>,
+    consensus_items: Arc<RwLock<Vec<A::Node>>>,
+    items: Arc<RwLock<Vec<A::Node>>>,
 }
 
 pub struct VecNodeItems<'a, S: State> {
@@ -70,14 +70,14 @@ pub struct VecNodeItems<'a, S: State> {
     items: RwLockReadGuard<'a, Vec<S::Node>>,
 }
 
-impl<S: State> Accessor for Vec<S>
-where S::Node: Consensus<S> {
-    type State = Self;
-    type Message = VecMessage<S>;
-    type Node = VecNode<S>; 
+impl<A: Accessor> Accessor for Vec<A>
+where A::Node: Consensus<A::State> {
+    type State = Vec<A::State>;
+    type Message = VecMessage<A::State>;
+    type Node = VecNode<A::State>; 
 }
 
-impl<S: State> Emitable for Vec<S> {}
+impl<A: Accessor> Emitable for Vec<A> {}
 
 impl<S: State> State for Vec<S> 
 where S::Node: Consensus<S> {

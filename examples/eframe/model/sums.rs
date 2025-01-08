@@ -5,12 +5,12 @@ use frand_node::*;
 use tokio::time::sleep;
 use crate::widget::title_frame::TitleFrame;
 
-use super::{SumMessage, SumState};
+use super::{SumMessage, Sum};
 
 #[node]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Sums {
-    pub values: Vec<SumState>,
+    pub values: Vec<Sum>,
     pub sums: Vec<i32>,
     pub total: i32,
 }

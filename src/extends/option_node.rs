@@ -7,21 +7,21 @@ const IS_SOME_ID: NodeId = 0;
 const ITEM_ID: NodeId = 1;
 
 #[derive(Debug, Clone)]
-pub enum OptionMessage<S: State> {
-    Item(Option<S::Message>),
+pub enum OptionMessage<A: Accessor> {
+    Item(Option<A::Message>),
     IsSome(bool),
-    State(Option<S>),
+    State(Option<A::State>),
 }
 
 #[derive(Debug, Clone)]
-pub struct OptionNode<S: State> { 
+pub struct OptionNode<A: Accessor> { 
     key: NodeKey,
     emitter: Option<Emitter>,
     pub is_some: AtomicNode<bool, Arc<AtomicBool>>, 
-    item: S::Node,
+    item: A::Node,
 }
 
-impl<A: Accessor> Accessor for Option<A>  {
+impl<A: Accessor> Accessor for Option<A> {
     type State = Option<A::State>;
     type Message = OptionMessage<A::State>;
     type Node = OptionNode<A::State>; 
