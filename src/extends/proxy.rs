@@ -70,6 +70,13 @@ where Proxy<A>: State<Message = ()> {
 
 impl<A: Accessor<State = S>, S: State> Node<Proxy<A>> for ProxyNode<A, S> 
 where Proxy<A>: State<Message = ()> {    
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+    fn clone_state(&self) -> Proxy<A> { Default::default() }
+}
+
+impl<A: Accessor<State = S>, S: State> NewNode<Proxy<A>> for ProxyNode<A, S> 
+where Proxy<A>: State<Message = ()> {    
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -84,10 +91,6 @@ where Proxy<A>: State<Message = ()> {
             subject: OnceCell::new(),
         }
     }
-
-    fn key(&self) -> &NodeKey { &self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-    fn clone_state(&self) -> Proxy<A> { Default::default() }
 }
 
 impl<A: Accessor<State = S>, S: State> Consensus<Proxy<A>> for ProxyNode<A, S> 

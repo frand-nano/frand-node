@@ -37,6 +37,13 @@ where S: State<Message = S, Node = Self> {
 
 impl<S: State + Message, A: AtomicState<S>> Node<S> for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {  
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+    fn clone_state(&self) -> S { self.v() } 
+}
+
+impl<S: State + Message, A: AtomicState<S>> NewNode<S> for AtomicNode<S, A> 
+where S: State<Message = S, Node = Self> {  
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -51,10 +58,6 @@ where S: State<Message = S, Node = Self> {
             state: AtomicState::new(Default::default()),
         }
     }
-
-    fn key(&self) -> &NodeKey { &self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-    fn clone_state(&self) -> S { self.v() } 
 }
 
 impl<S: State + Message, A: AtomicState<S>> Consensus<S> for AtomicNode<S, A> 

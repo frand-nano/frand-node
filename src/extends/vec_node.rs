@@ -23,7 +23,7 @@ where S::Node: Consensus<S> {
         if (**len as usize) < consensus_items.len() {
             consensus_items[**len as usize].apply_state(item);
         } else {
-            let consensus: S::Node = Node::new(
+            let consensus: S::Node = NewNode::new(
                 key.to_vec(), 
                 Some(**len),
                 consensus_emitter,
@@ -264,6 +264,21 @@ impl<S: State> Node<Vec<S>> for VecNode<S>
 where 
 S::Node: Consensus<S>,
 Vec<S>: State<Message = VecMessage<S>>, 
+{           
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }  
+
+    fn clone_state(&self) -> Vec<S> { 
+        self.items()
+        .map(|item| item.clone_state())
+        .collect()
+    }
+}
+
+impl<S: State> NewNode<Vec<S>> for VecNode<S> 
+where 
+S::Node: Consensus<S>,
+Vec<S>: State<Message = VecMessage<S>>, 
 {   
     fn new(
         mut key: Vec<NodeId>,
@@ -290,15 +305,6 @@ Vec<S>: State<Message = VecMessage<S>>,
             consensus_items: items.clone(),
             items,
         }
-    }
-                 
-    fn key(&self) -> &NodeKey { &self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }  
-
-    fn clone_state(&self) -> Vec<S> { 
-        self.items()
-        .map(|item| item.clone_state())
-        .collect()
     }
 }
 

@@ -145,6 +145,19 @@ impl<S: State> System for OptionNode<S> {
 
 impl<S: State> Node<Option<S>> for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {  
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+
+    fn clone_state(&self) -> Option<S> { 
+        match self.is_some.v() {
+            true => Some(self.item.clone_state()),
+            false => None,
+        }
+    }
+}
+
+impl<S: State> NewNode<Option<S>> for OptionNode<S> 
+where Option<S>: State<Message = OptionMessage<S>> {  
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -155,18 +168,8 @@ where Option<S>: State<Message = OptionMessage<S>> {
         Self { 
             key: key.clone().into_boxed_slice(),   
             emitter: emitter.cloned(),
-            is_some: Node::new(key.clone(), Some(IS_SOME_ID), emitter),
-            item: Node::new(key.clone(), Some(ITEM_ID), emitter),
-        }
-    }
-
-    fn key(&self) -> &NodeKey { &self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-
-    fn clone_state(&self) -> Option<S> { 
-        match self.is_some.v() {
-            true => Some(self.item.clone_state()),
-            false => None,
+            is_some: NewNode::new(key.clone(), Some(IS_SOME_ID), emitter),
+            item: NewNode::new(key.clone(), Some(ITEM_ID), emitter),
         }
     }
 }

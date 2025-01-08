@@ -2,12 +2,6 @@ use std::future::Future;
 use super::*;
 
 pub trait Node<S: State>: System {   
-    fn new(
-        key: Vec<NodeId>,
-        id: Option<NodeId>,
-        emitter: Option<&Emitter>,
-    ) -> Self;
-
     fn key(&self) -> &NodeKey;
     fn emitter(&self) -> Option<&Emitter>;
     fn clone_state(&self) -> S;
@@ -30,4 +24,12 @@ pub trait Node<S: State>: System {
             emitter.emit_future(self.key().clone(), future)
         }
     }
+}
+
+pub trait NewNode<S: State> {
+    fn new(
+        key: Vec<NodeId>,
+        id: Option<NodeId>,
+        emitter: Option<&Emitter>,
+    ) -> Self;
 }

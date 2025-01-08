@@ -1,5 +1,4 @@
 use std::time::Duration;
-
 use serde::{Deserialize, Serialize};
 use eframe::egui::*;
 use frand_node::*;

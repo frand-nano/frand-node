@@ -14,7 +14,7 @@ pub mod prelude {
     
     pub use crate::{
         bases::{
-            Accessor, State, Message, Node, Emitable, Fallback, System,
+            Accessor, State, Message, Node, NewNode, Emitable, Fallback, System,
             Emitter, 
         },
         extends::{

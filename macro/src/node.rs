@@ -171,6 +171,17 @@ pub fn expand(
         }
         
         impl #mp::Node<#state_name> for #node_name { 
+            fn key(&self) -> &#mp::NodeKey { &self.key }
+            fn emitter(&self) -> Option<&#mp::Emitter> { self.emitter.as_ref() }
+
+            fn clone_state(&self) -> #state_name { 
+                #state_name {
+                    #(#names: self.#names.clone_state(),)*   
+                }
+            }
+        }
+        
+        impl #mp::NewNode<#state_name> for #node_name { 
             fn new(
                 mut key: Vec<#mp::NodeId>,
                 id: Option<#mp::NodeId>,
@@ -181,18 +192,9 @@ pub fn expand(
                 Self { 
                     key: key.clone().into_boxed_slice(),   
                     emitter: emitter.cloned(),
-                    #(#names: #mp::Node::new(
+                    #(#names: #mp::NewNode::new(
                         key.clone(), Some(#indexes), emitter,
                     ),)*
-                }
-            }
-
-            fn key(&self) -> &#mp::NodeKey { &self.key }
-            fn emitter(&self) -> Option<&#mp::Emitter> { self.emitter.as_ref() }
-
-            fn clone_state(&self) -> #state_name { 
-                #state_name {
-                    #(#names: self.#names.clone_state(),)*   
                 }
             }
         }

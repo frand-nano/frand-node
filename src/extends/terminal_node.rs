@@ -41,6 +41,13 @@ where S: State<Message = S> {
 
 impl<S: State + Message> Node<S> for TerminalNode<S> 
 where S: State<Message = S> {    
+    fn key(&self) -> &NodeKey { &self.key }
+    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
+    fn clone_state(&self) -> S { self.read().clone() }
+}
+
+impl<S: State + Message> NewNode<S> for TerminalNode<S> 
+where S: State<Message = S> {    
     fn new(
         mut key: Vec<NodeId>,
         id: Option<NodeId>,
@@ -54,10 +61,6 @@ where S: State<Message = S> {
             state: Default::default(),
         }
     }
-
-    fn key(&self) -> &NodeKey { &self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-    fn clone_state(&self) -> S { self.read().clone() }
 }
 
 impl<S: State + Message> Consensus<S> for TerminalNode<S> 
