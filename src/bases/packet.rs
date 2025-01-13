@@ -5,7 +5,7 @@ use super::*;
 pub type Index = u32;
 pub type Payload = Box<[u8]>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key(u64, u64);
 
 #[derive(Debug, Clone)]

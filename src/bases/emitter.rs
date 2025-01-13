@@ -4,20 +4,20 @@ use super::*;
 #[derive(Debug, Clone)]
 pub struct Emitter {
     callback: Callback,
-    future_callback: FutureCallback,
     carry_callback: Callback,
+    future_callback: FutureCallback,
 }
 
 impl Emitter {
     pub fn new(
-        callback: &Callback,
-        future_callback: &FutureCallback,
-        carry_callback: &Callback,
+        callback: Callback,
+        carry_callback: Callback,
+        future_callback: FutureCallback,
     ) -> Self {
         Self { 
-            callback: callback.clone(), 
-            future_callback: future_callback.clone(), 
-            carry_callback: carry_callback.clone(), 
+            callback, 
+            carry_callback, 
+            future_callback, 
         }
     }
 

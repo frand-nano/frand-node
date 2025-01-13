@@ -4,7 +4,6 @@ use eframe::egui::*;
 use frand_node::*;
 use tokio::time::sleep;
 use crate::widget::title_frame::TitleFrame;
-
 use super::{SumMessage, Sum};
 
 #[node]
@@ -32,7 +31,7 @@ impl System for Sums {
 
             // values 의 index 번째 item 에 sum 이 emit 되었을 때
             // sums 의 index 번째 item 에 sum 을 emit
-            Values(Item((index, Sum(sum)))) => self.sums.items()[index as usize].emit(sum),            
+            Values(Item((index, Sum(sum)))) => self.sums.item(index).emit(sum),            
 
             // sums 에 emit 되었을 때
             // sums 의 모든 값들을 Box에 모아 1초뒤에 그 합을 emit

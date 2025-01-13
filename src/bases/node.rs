@@ -30,6 +30,6 @@ pub trait NewNode<S: State> {
     fn new(
         key: Key,
         index: Index,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self;
 }

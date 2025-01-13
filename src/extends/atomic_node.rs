@@ -15,7 +15,7 @@ impl<S: State, A: AtomicState<S>> AtomicNode<S, A> {
 
 impl<S: State + Message, A: AtomicState<S>> Default for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {
-    fn default() -> Self { Self::new(0.into(), 0, None) }
+    fn default() -> Self { Self::new(Key::default(), 0, None) }
 }
 
 impl<S: State + Message, A: AtomicState<S>> Accessor for AtomicNode<S, A> 
@@ -47,14 +47,14 @@ where S: State<Message = S, Node = Self> {
     fn new(
         mut key: Key,
         index: Index,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         key = key + index;
         
         Self { 
             _phantom: Default::default(),
             key, 
-            emitter: emitter.cloned(),
+            emitter,
             state: AtomicState::new(Default::default()),
         }
     }
@@ -64,17 +64,17 @@ impl<S: State + Message, A: AtomicState<S>> Consensus<S> for AtomicNode<S, A>
 where S: State<Message = S, Node = Self> {  
     fn new_from(
         node: &Self,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         Self {
             _phantom: Default::default(),
             key: node.key,
-            emitter: emitter.cloned(),
+            emitter,
             state: node.state.clone(),
         }
     }
 
-    fn set_emitter(&mut self, emitter: Option<&Emitter>) { self.emitter = emitter.cloned() }
+    fn set_emitter(&mut self, emitter: Option<Emitter>) { self.emitter = emitter }
     fn apply(&self, message: S::Message) { self.state.store(message, Ordering::Relaxed) }
     fn apply_state(&self, state: S) { self.state.store(state, Ordering::Relaxed) }    
 }

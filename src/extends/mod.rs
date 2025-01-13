@@ -53,13 +53,11 @@ macro_rules! impl_message_for {
                     parent_key: frand_node::macro_prelude::Key,
                     packet: &frand_node::macro_prelude::PacketMessage, 
                 ) -> core::result::Result<Self, frand_node::macro_prelude::MessageError> { 
-                    let index = (packet.key() - parent_key) as frand_node::macro_prelude::Index;
-
-                    match index {
+                    match packet.key() - parent_key {
                         0 => Ok(unsafe { 
                             frand_node::macro_prelude::State::from_emitable(packet.payload()) 
                         }),
-                        _ => Err(frand_node::macro_prelude::MessageError::new(
+                        index => Err(frand_node::macro_prelude::MessageError::new(
                             packet.key(),
                             Some(index),
                             format!("{}: unknown index", std::any::type_name::<Self>()),
@@ -71,11 +69,9 @@ macro_rules! impl_message_for {
                     parent_key: frand_node::macro_prelude::Key,
                     packet: &frand_node::macro_prelude::Packet, 
                 ) -> core::result::Result<Self, frand_node::macro_prelude::PacketError> {
-                    let index = (packet.key() - parent_key) as frand_node::macro_prelude::Index;
-
-                    Ok(match index {
+                    Ok(match packet.key() - parent_key {
                         0 => Ok(packet.read_state()),
-                        _ => Err(frand_node::macro_prelude::PacketError::new(
+                        index => Err(frand_node::macro_prelude::PacketError::new(
                             packet.clone(),
                             Some(index),
                             format!("{}: unknown index", std::any::type_name::<Self>()),

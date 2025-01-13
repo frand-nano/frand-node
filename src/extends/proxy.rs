@@ -51,7 +51,7 @@ impl<A: Accessor<State = S>, S: State> ProxyNode<A, S> {
 }
 
 impl<A: Accessor<State = S>, S: State> Default for ProxyNode<A, S> {
-    fn default() -> Self { Self::new(0.into(), 0, None) }
+    fn default() -> Self { Self::new(Key::default(), 0, None) }
 }
 
 impl<A: Accessor<State = S>, S: State> Accessor for ProxyNode<A, S> {
@@ -82,14 +82,14 @@ where Proxy<A>: State<Message = ()> {
     fn new(
         mut key: Key,
         index: Index,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {        
         key = key + index;
         
         Self { 
             _phantom: Default::default(),
             key,   
-            emitter: emitter.cloned(),
+            emitter,
             subject: OnceCell::new(),
         }
     }
@@ -99,17 +99,17 @@ impl<A: Accessor<State = S>, S: State> Consensus<Proxy<A>> for ProxyNode<A, S>
 where Proxy<A>: State<Message = ()> {     
     fn new_from(
         node: &Self,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         Self {
             _phantom: Default::default(),
-            key: node.key.clone(),
-            emitter: emitter.cloned(),
+            key: node.key,
+            emitter,
             subject: node.subject.clone(),
         }
     }
 
-    fn set_emitter(&mut self, emitter: Option<&Emitter>) { self.emitter = emitter.cloned() }
+    fn set_emitter(&mut self, emitter: Option<Emitter>) { self.emitter = emitter }
     fn apply(&self, _message: ()) {}
     fn apply_state(&self, _state: Proxy<A>) {}
 }

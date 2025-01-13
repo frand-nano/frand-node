@@ -124,7 +124,7 @@ impl<S: State> OptionNode<S> {
 
 impl<S: State> Default for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {    
-    fn default() -> Self { Self::new(0.into(), 0, None) }
+    fn default() -> Self { Self::new(Key::default(), 0, None) }
 }
 
 impl<S: State> Accessor for OptionNode<S>  {
@@ -169,15 +169,15 @@ where Option<S>: State<Message = OptionMessage<S>> {
     fn new(
         mut key: Key,
         index: Index,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {        
         key = key + index;
         
         Self { 
             key,   
-            emitter: emitter.cloned(),
-            is_some: NewNode::new(key, IS_SOME_INDEX, emitter),
-            item: NewNode::new(key, ITEM_INDEX, emitter),
+            emitter: emitter.clone(),
+            is_some: NewNode::new(key, IS_SOME_INDEX, emitter.clone()),
+            item: NewNode::new(key, ITEM_INDEX, emitter.clone()),
         }
     }
 }
@@ -189,20 +189,20 @@ Option<S>: State<Message = OptionMessage<S>>,
 {  
     fn new_from(
         node: &Self,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         Self {
             key: node.key,
-            emitter: emitter.cloned(),
-            is_some: Consensus::new_from(&node.is_some, emitter),
-            item: Consensus::new_from(&node.item, emitter),
+            emitter: emitter.clone(),
+            is_some: Consensus::new_from(&node.is_some, emitter.clone()),
+            item: Consensus::new_from(&node.item, emitter.clone()),
         }
     }
 
-    fn set_emitter(&mut self, emitter: Option<&Emitter>) { 
-        self.emitter = emitter.cloned(); 
-        self.is_some.set_emitter(emitter);
-        self.item.set_emitter(emitter);
+    fn set_emitter(&mut self, emitter: Option<Emitter>) { 
+        self.emitter = emitter.clone(); 
+        self.is_some.set_emitter(emitter.clone());
+        self.item.set_emitter(emitter.clone());
     }
 
     fn apply(&self, message: OptionMessage<S>) {
@@ -220,7 +220,14 @@ Option<S>: State<Message = OptionMessage<S>>,
                     }
                 }
             },
-            OptionMessage::State(state) => self.apply_state(state),
+            OptionMessage::State(state) => {
+                self.apply_state(state.clone());
+
+                self.is_some.emit(state.is_some());
+                if let Some(item) = state {
+                    self.item.emit(item);
+                }           
+            },
         }    
     }
 

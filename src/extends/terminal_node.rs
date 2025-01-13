@@ -19,7 +19,7 @@ impl<S: State> TerminalNode<S> {
 
 impl<S: State + Message> Default for TerminalNode<S> 
 where S: State<Message = S> {    
-    fn default() -> Self { Self::new(0.into(), 0, None) }
+    fn default() -> Self { Self::new(Key::default(), 0, None) }
 }
 
 impl<S: State + Message> Accessor for TerminalNode<S>  
@@ -51,13 +51,13 @@ where S: State<Message = S> {
     fn new(
         mut key: Key,
         index: Index,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         key = key + index;
         
         Self { 
             key,   
-            emitter: emitter.cloned(),
+            emitter,
             state: Default::default(),
         }
     }
@@ -67,16 +67,16 @@ impl<S: State + Message> Consensus<S> for TerminalNode<S>
 where S: State<Message = S> {    
     fn new_from(
         node: &Self,
-        emitter: Option<&Emitter>,
+        emitter: Option<Emitter>,
     ) -> Self {
         Self {
-            key: node.key.clone(),
-            emitter: emitter.cloned(),
+            key: node.key,
+            emitter,
             state: node.state.clone(),
         }
     }
 
-    fn set_emitter(&mut self, emitter: Option<&Emitter>) { self.emitter = emitter.cloned() }
+    fn set_emitter(&mut self, emitter: Option<Emitter>) { self.emitter = emitter }
     fn apply(&self, message: S::Message) { self.apply_state(message) }    
     fn apply_state(&self, state: S) {     
         let mut state_mut = self.state.write()

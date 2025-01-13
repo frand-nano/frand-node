@@ -12,8 +12,8 @@ pub struct Processor<A: Accessor> {
     node: A::Node,
     input_tx: UnboundedSender<PacketMessage>,
     input_rx: UnboundedReceiver<PacketMessage>,
-    input_future_tx: UnboundedSender<EmitableFuture>,
-    input_future_rx: UnboundedReceiver<EmitableFuture>,
+    input_future_tx: UnboundedSender<FutureMessage>,
+    input_future_rx: UnboundedReceiver<FutureMessage>,
     carry_tx: UnboundedSender<PacketMessage>,
     carry_rx: UnboundedReceiver<PacketMessage>,
     carrys: HashMap<Key, PacketMessage, BuildHasherDefault<FxHasher>>,    
@@ -30,11 +30,11 @@ pub struct ProcessorContext<A: Accessor> {
     process_node: A::Node,
     processed: HashSet<Key, BuildHasherDefault<FxHasher>>,    
     process_rx: Receiver<PacketMessage>,
-    process_future_rx: Receiver<EmitableFuture>,
+    process_future_rx: Receiver<FutureMessage>,
     output_in_use: Arc<AtomicBool>,
     output_tx: UnboundedSender<PacketMessage>,
     packets: VecDeque<PacketMessage>,
-    futures: VecDeque<EmitableFuture>,
+    futures: VecDeque<FutureMessage>,
     update: fn(&A::Node, A::Message, Option<f32>),
 }
 
@@ -53,8 +53,8 @@ where A::Node: Consensus<A::State> {
     pub fn node(&self) -> &A::Node { &self.node }
     pub fn input_tx(&self) -> &UnboundedSender<PacketMessage> { &self.input_tx }
     pub fn input_rx(&self) -> &UnboundedReceiver<PacketMessage> { &self.input_rx }
-    pub fn input_future_tx(&self) -> &UnboundedSender<EmitableFuture> { &self.input_future_tx }
-    pub fn input_future_rx(&self) -> &UnboundedReceiver<EmitableFuture> { &self.input_future_rx }
+    pub fn input_future_tx(&self) -> &UnboundedSender<FutureMessage> { &self.input_future_tx }
+    pub fn input_future_rx(&self) -> &UnboundedReceiver<FutureMessage> { &self.input_future_rx }
     pub fn output_in_use(&self) -> &Arc<AtomicBool> { &self.output_in_use }
     pub fn output_tx(&self) -> &UnboundedSender<PacketMessage> { &self.output_tx }
     pub fn take_output_rx(&mut self) -> Option<UnboundedReceiver<PacketMessage>> { 
@@ -103,12 +103,12 @@ where A::Node: Consensus<A::State> {
         let output_in_use = Arc::new(AtomicBool::new(false));
 
         let emitter = Emitter::new(
-            &callback, 
-            &future_callback, 
-            &carry_callback,
+            callback, 
+            carry_callback,
+            future_callback, 
         );
 
-        node.set_emitter(Some(&emitter));
+        node.set_emitter(Some(emitter));
 
         Self {
             context: ProcessorContext::new(
@@ -251,10 +251,10 @@ where A::Node: Consensus<A::State> {
         });
 
         Self {
-            process_node: Consensus::new_from(&node, Some(&Emitter::new(
-                &callback, 
-                &future_callback, 
-                &carry_callback,
+            process_node: Consensus::new_from(&node, Some(Emitter::new(
+                callback, 
+                carry_callback,
+                future_callback, 
             ))),
             processed: HashSet::default(),
             process_rx,          
@@ -272,14 +272,14 @@ where A::Node: Consensus<A::State> {
             loop {
                 if !self.processed.contains(&packet.key()) {
                     self.processed.insert(packet.key());
+
+                    let message = A::Message::from_packet_message(Key::default(), &packet)?;
+
+                    self.process_node.apply(message.clone());
                     
                     let delta = packet.carry().map(|carry| {
                         carry.elapsed().as_secs_f32()
                     });
-
-                    let message = A::Message::from_packet_message(0.into(), &packet)?;
-
-                    self.process_node.apply(message.clone());
 
                     if self.output_in_use.load(Ordering::Acquire) {
                         self.output_tx.send(packet)?;
@@ -308,7 +308,7 @@ where A::Node: Consensus<A::State> {
                     self.processed.insert(future.0.into());
         
                     let packet = future.1.await;
-                    let message = A::Message::from_packet_message(0.into(), &packet)?;
+                    let message = A::Message::from_packet_message(Key::default(), &packet)?;
 
                     self.process_node.apply(message.clone());
             

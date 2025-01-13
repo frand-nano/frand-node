@@ -204,7 +204,7 @@ pub fn expand(
         }
 
         impl Default for #node_name { 
-            fn default() -> Self { Self::new(0.into(), 0, None) }
+            fn default() -> Self { Self::new(#mp::Key::default(), 0, None) }
         }
 
         impl #mp::Accessor for #node_name  {
@@ -237,15 +237,15 @@ pub fn expand(
             fn new(
                 mut key: #mp::Key,
                 index: #mp::Index,
-                emitter: Option<&#mp::Emitter>,
+                emitter: Option<#mp::Emitter>,
             ) -> Self {
                 key = key + index;
 
                 Self { 
                     key,   
-                    emitter: emitter.cloned(),
+                    emitter: emitter.clone(),
                     #(#names: #mp::NewNode::new(
-                        key, #node_index_starts_name::#upper_snake_names, emitter,
+                        key, #node_index_starts_name::#upper_snake_names, emitter.clone(),
                     ),)*
                 }
             }
@@ -254,24 +254,27 @@ pub fn expand(
         impl #mp::Consensus<#state_name> for #node_name { 
             fn new_from(
                 node: &Self,
-                emitter: Option<&#mp::Emitter>,
+                emitter: Option<#mp::Emitter>,
             ) -> Self {
                 Self {
                     key: node.key,
-                    emitter: emitter.cloned(),
-                    #(#names: #mp::Consensus::new_from(&node.#names, emitter),)*
+                    emitter: emitter.clone(),
+                    #(#names: #mp::Consensus::new_from(&node.#names, emitter.clone()),)*
                 }
             }
 
-            fn set_emitter(&mut self, emitter: Option<&#mp::Emitter>) { 
-                self.emitter = emitter.cloned(); 
-                #(self.#names.set_emitter(emitter);)*   
+            fn set_emitter(&mut self, emitter: Option<#mp::Emitter>) { 
+                self.emitter = emitter.clone(); 
+                #(self.#names.set_emitter(emitter.clone());)*   
             }
 
             fn apply(&self, message: #message_name) {
                 match message {
                     #(#message_name::#pascal_names(#names) => self.#names.apply(#names),)*
-                    #message_name::State(state) => self.apply_state(state),
+                    #message_name::State(state) => {
+                        self.apply_state(state.clone());
+                        #(self.#names.emit(state.#names);)*                    
+                    },
                 } 
             }
 
