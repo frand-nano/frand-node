@@ -8,50 +8,9 @@ const PUSH_INDEX: Index = 1;
 const POP_INDEX: Index = 2;
 const ITEM_INDEX: Index = 3;
 
-pub trait VecConsensus<S: State> 
-where S::Node: Consensus<S> {
-    fn push(&self, item: S);
-    fn pop(&self);
-
-    fn items_write(&self) -> (Key, RwLockWriteGuard<usize>, RwLockWriteGuard<Vec<S::Node>>);
-    fn consensus_items_write(&self) -> (Key, RwLockWriteGuard<usize>, RwLockWriteGuard<Vec<S::Node>>);
-
-    fn push_inner(
-        key: Key,
-        consensus_emitter: Option<Emitter>,
-        len: &mut RwLockWriteGuard<usize>, 
-        consensus_items: &mut RwLockWriteGuard<Vec<S::Node>>,
-        item: S,
-    ) {
-        if **len < consensus_items.len() {
-            consensus_items[**len].apply_state(item);
-        } else {
-            let consensus: S::Node = NewNode::new(
-                key, 
-                ITEM_INDEX + **len as Index * S::NODE_SIZE,
-                consensus_emitter,
-            );
-    
-            consensus.apply_state(item);
-    
-            consensus_items.push(consensus);
-        }
-
-        **len = len.saturating_add(1);
-    }
-
-    fn pop_inner(
-        len: &mut RwLockWriteGuard<usize>, 
-        consensus_items: &mut RwLockWriteGuard<Vec<S::Node>>,
-    ) {
-        **len = len.saturating_sub(1);
-        consensus_items[**len].emit(Default::default());
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum VecMessage<A: Accessor> {
-    Item((usize, A::Message)),
+    Item((Index, A::Message)),
     Push(A::State),
     Pop(()),
     State(Vec<A::State>),
@@ -75,6 +34,12 @@ pub struct VecNodeItems<'a, S: State> {
     items: RwLockReadGuard<'a, Vec<S::Node>>,
 }
 
+pub enum VecNodeItem<'a, A: Accessor> {
+    Active(&'a A::Node),
+    Inactive(&'a A::Node),
+    None,
+}
+
 impl<A: Accessor> Accessor for Vec<A>
 where A::Node: Consensus<A::State> {
     type State = Vec<A::State>;
@@ -95,7 +60,7 @@ where S::Node: Consensus<S> {
         match message {
             Self::Message::Push(item) => self.push(item),
             Self::Message::Pop(()) => { self.pop(); },
-            Self::Message::Item((id, message)) => self[id].apply(message),
+            Self::Message::Item((id, message)) => self[id as usize].apply(message),
             Self::Message::State(state) => *self = state,
         }
     }    
@@ -118,7 +83,7 @@ where S::Node: Consensus<S> {
             index => {
                 let index = (index - ITEM_INDEX) / S::NODE_SIZE;
                 Ok(Self::Item(
-                    (index as usize, S::Message::from_packet_message(
+                    (index, S::Message::from_packet_message(
                         parent_key + (ITEM_INDEX + index * S::NODE_SIZE),
                         packet, 
                     )?)
@@ -142,7 +107,7 @@ where S::Node: Consensus<S> {
             index => {                
                 let index = (index - ITEM_INDEX) / S::NODE_SIZE;
                 Ok(Self::Item(
-                    (index as usize, S::Message::from_packet(
+                    (index, S::Message::from_packet(
                         parent_key + (ITEM_INDEX + index * S::NODE_SIZE),
                         packet, 
                     )?)
@@ -171,16 +136,22 @@ where S::Node: Consensus<S> {
         .unwrap_or_else(|err| panic!("{:?} {err}", self.key))
     }
 
-    pub fn item(&self, index: usize) -> S::Node {
-        let (_len, items) = self.items_read();
-        let items_len = items.len();
-        
-        if items_len <= index {
-            let item_consensuses = self.consensus_items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
-            Consensus::new_from(&item_consensuses[index], self.emitter.clone())
-        } else {
-            items[index].clone()
-        }        
+    pub fn item(&self, index: Index) -> Option<S::Node> {
+        let (len, items) = self.items_read();
+        match Self::item_inner(&len, &items, index as usize) {
+            VecNodeItem::Active(item) => Some(item.clone()),
+            VecNodeItem::Inactive(item) => Some(item.clone()),
+            VecNodeItem::None => None,
+        }    
+    }
+
+    pub fn active_item(&self, index: Index) -> Option<S::Node> {
+        let (len, items) = self.items_read();
+        match Self::item_inner(&len, &items, index as usize) {
+            VecNodeItem::Active(item) => Some(item.clone()),
+            VecNodeItem::Inactive(_) => None,
+            VecNodeItem::None => None,
+        }    
     }
 
     pub fn items<'a>(&'a self) -> VecNodeItems<'a, S> {
@@ -232,10 +203,10 @@ where S::Node: Consensus<S> {
             drop(items);
             let mut items = self.items.write().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
 
-            let item_consensuses = self.consensus_items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
+            let consensus_items = self.consensus_items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
 
             for i in items_len..*len {
-                let node: S::Node = Consensus::new_from(&item_consensuses[i], self.emitter.clone());
+                let node: S::Node = Consensus::new_from(&consensus_items[i], self.emitter.clone());
                 items.push(node);
             }
 
@@ -272,10 +243,11 @@ Vec<S>: State<Message = VecMessage<S>>,
     fn fallback(&self, message: VecMessage<S>, delta: Option<f32>) {
         use VecMessage::*;
         match message {
-            Item((id, message)) if id < self.len() => {
-                self.item(id).handle(message, delta)
+            Item((index, message)) => {
+                if let Some(item) = self.item(index) {
+                    item.handle(message, delta)
+                }
             },
-            Item(_) => (),
             Push(_) => (),
             Pop(_) => (),
             State(_) => (),
@@ -374,8 +346,10 @@ Vec<S>: State<Message = VecMessage<S>>,
             VecMessage::Pop(()) => {
                 self.pop();
             },
-            VecMessage::Item((index, item)) => {
-                self.item(index).apply(item)
+            VecMessage::Item((index, message)) => {
+                if let Some(item) = self.item(index) {
+                    item.apply(message)
+                }
             },
             VecMessage::State(state) => {            
                 self.apply_state(state.clone());
@@ -392,6 +366,7 @@ Vec<S>: State<Message = VecMessage<S>>,
         let len = *len_write;
 
         if len < state.len() {
+
             for _ in len..state.len() {
                 Self::push_inner(
                     key, 
@@ -402,10 +377,13 @@ Vec<S>: State<Message = VecMessage<S>>,
                 );
             }
         } else if state.len() < len {
+            let items = self.items.read()
+            .unwrap_or_else(|err| panic!("{:?} {err}", key));
+
             for _ in state.len()..len {
                 Self::pop_inner(
                     &mut len_write,
-                    &mut consensus_items, 
+                    &items, 
                 );
             }
         }
@@ -413,6 +391,62 @@ Vec<S>: State<Message = VecMessage<S>>,
         consensus_items.iter_mut()
         .zip(state.into_iter())
         .for_each(|(item, state)| item.apply_state(state)); 
+    }
+}
+
+pub trait VecConsensus<S: State> 
+where S::Node: Consensus<S> {
+    fn push(&self, item: S);
+    fn pop(&self);
+
+    fn items_write(&self) -> (Key, RwLockWriteGuard<usize>, RwLockWriteGuard<Vec<S::Node>>);
+    fn consensus_items_write(&self) -> (Key, RwLockWriteGuard<usize>, RwLockWriteGuard<Vec<S::Node>>);
+
+    fn push_inner(
+        key: Key,
+        consensus_emitter: Option<Emitter>,
+        len: &mut RwLockWriteGuard<usize>, 
+        consensus_items: &mut RwLockWriteGuard<Vec<S::Node>>,
+        item: S,
+    ) {
+        if **len < consensus_items.len() {
+            consensus_items[**len].apply_state(item);
+        } else {
+            let consensus: S::Node = NewNode::new(
+                key, 
+                ITEM_INDEX + **len as Index * S::NODE_SIZE,
+                consensus_emitter,
+            );
+    
+            consensus.apply_state(item);
+    
+            consensus_items.push(consensus);
+        }
+
+        **len = len.saturating_add(1);
+    }
+
+    fn pop_inner(
+        len: &mut RwLockWriteGuard<usize>, 
+        items: &RwLockReadGuard<Vec<S::Node>>,
+    ) {
+        **len = len.saturating_sub(1);
+        items[**len].emit(Default::default());
+    }
+
+    fn item_inner<'a>(
+        len: &'a RwLockReadGuard<usize>, 
+        items: &'a RwLockReadGuard<Vec<S::Node>>,
+        index: usize,
+    ) -> VecNodeItem<'a, S::Node> {
+        if index < **len {
+            VecNodeItem::Active(&items[index])
+        } else {       
+            match items.get(index) {
+                Some(item) => VecNodeItem::Inactive(item),
+                None => VecNodeItem::None,
+            }
+        }      
     }
 }
 
@@ -431,10 +465,12 @@ where S::Node: Consensus<S> {
     }
 
     fn pop(&self) {
-        let (_, mut len, mut consensus_items) = self.consensus_items_write();
+        let mut len = self.len.write().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
+        let items = self.items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
+
         Self::pop_inner(
             &mut len, 
-            &mut consensus_items, 
+            &items, 
         )
     }
 
@@ -444,10 +480,10 @@ where S::Node: Consensus<S> {
         let items_len = items.len();
         
         if items_len < *len {
-            let item_consensuses = self.consensus_items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
+            let consensus_items = self.consensus_items.read().unwrap_or_else(|err| panic!("{:?} {err}", self.key));
 
             for i in items_len..*len {
-                let node: S::Node = Consensus::new_from(&item_consensuses[i], self.emitter.clone());
+                let node: S::Node = Consensus::new_from(&consensus_items[i], self.emitter.clone());
                 items.push(node);
             }
 

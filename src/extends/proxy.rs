@@ -5,111 +5,145 @@ use bases::*;
 use crate::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proxy<A: Accessor>(PhantomData<A>);
+pub struct Proxy<A: Accessor, L: Accessor = (), S: Accessor = A> {
+    _phantom_a: PhantomData<A>,
+    _phantom_s: PhantomData<S>,
+    locate: L::State,
+}
 
 #[derive(Debug, Clone)]
-pub struct ProxyNode<A: Accessor<State = S>, S: State>{
+pub struct ProxyNode<A: Accessor, L: Accessor = (), S: Accessor = A>{
     _phantom: PhantomData<A>,
-    key: Key,
-    emitter: Option<Emitter>,
-    subject: OnceCell<S::Node>,
+    subject: OnceCell<(A::Node, fn(&A::Node, L::State) -> Option<S::Node>)>,
+    locate: L::Node,
 }
 
-impl<A: Accessor> Default for Proxy<A> {
+impl<A: Accessor, L: Accessor, S: Accessor> Default for Proxy<A, L, S> {
     fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
-impl<A: Accessor<State = S>, S: State> Accessor for Proxy<A> {
-    type State = Self;
-    type Message = ();
-    type Node = ProxyNode<A, S>; 
-}
-
-impl<A: Accessor> Emitable for Proxy<A> {}
-
-impl<A: Accessor> State for Proxy<A> {
-    const NODE_SIZE: Index = 1; 
-
-    fn apply(
-        &mut self,  
-        _message: Self::Message,
-    ) {}
-}
-
-impl<A: Accessor<State = S>, S: State> ProxyNode<A, S> {
-    pub fn subject(&self) -> &S::Node { 
-        self.subject.get()
-        .unwrap_or_else(|| panic!("must set subject before use {:?}", self.key))
-    }
-
-    pub fn set_subject(&mut self, subject: &S::Node) { 
-        self.subject.set(subject.clone())
-        .unwrap_or_else(|err| panic!("must set subject before use {:?} {:?}", self.key, err))
-    }
-}
-
-impl<A: Accessor<State = S>, S: State> Default for ProxyNode<A, S> {
-    fn default() -> Self { Self::new(Key::default(), 0, None) }
-}
-
-impl<A: Accessor<State = S>, S: State> Accessor for ProxyNode<A, S> {
-    type State = Proxy<A>;
-    type Message = ();    
-    type Node = Self;
-}
-
-impl<A: Accessor<State = S>, S: State> Fallback for ProxyNode<A, S> 
-where Proxy<A>: State<Message = ()> {    
-    fn fallback(&self, _message: Self::Message, _delta: Option<f32>) {}
-}
-
-impl<A: Accessor<State = S>, S: State> System for ProxyNode<A, S> 
-where Proxy<A>: State<Message = ()> {    
-    fn handle(&self, _message: Self::Message, _delta: Option<f32>) {}
-}
-
-impl<A: Accessor<State = S>, S: State> Node<Proxy<A>> for ProxyNode<A, S> 
-where Proxy<A>: State<Message = ()> {    
-    fn key(&self) -> Key { self.key }
-    fn emitter(&self) -> Option<&Emitter> { self.emitter.as_ref() }
-    fn clone_state(&self) -> Proxy<A> { Default::default() }
-}
-
-impl<A: Accessor<State = S>, S: State> NewNode<Proxy<A>> for ProxyNode<A, S> 
-where Proxy<A>: State<Message = ()> {    
-    fn new(
-        mut key: Key,
-        index: Index,
-        emitter: Option<Emitter>,
-    ) -> Self {        
-        key = key + index;
-        
         Self { 
-            _phantom: Default::default(),
-            key,   
-            emitter,
-            subject: OnceCell::new(),
+            _phantom_a: Default::default(), 
+            _phantom_s: Default::default(), 
+            locate: Default::default(), 
         }
     }
 }
 
-impl<A: Accessor<State = S>, S: State> Consensus<Proxy<A>> for ProxyNode<A, S> 
-where Proxy<A>: State<Message = ()> {     
+impl<A: Accessor, L: Accessor, S: Accessor> Accessor for Proxy<A, L, S> {
+    type State = Self;
+    type Message = L::Message;
+    type Node = ProxyNode<A, L, S>; 
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Emitable for Proxy<A, L, S> {}
+
+impl<A: Accessor, L: Accessor, S: Accessor> State for Proxy<A, L, S> {
+    const NODE_SIZE: Index = <L::State as State>::NODE_SIZE; 
+
+    fn apply(
+        &mut self,  
+        message: Self::Message,
+    ) {
+        self.locate.apply(message)
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> ProxyNode<A, L, S> {
+    pub fn locate(&self) -> &L::Node { &self.locate }
+
+    pub fn subject(&self) -> Option<S::Node> { 
+        let (container, selector) = self.subject.get()
+        .unwrap_or_else(|| panic!("must set subject before use {:?}", self.key()));
+
+        selector(container, self.locate.clone_state())
+    }
+
+    pub fn set_subject(&mut self, container: &A::Node) 
+    where A: Accessor<Node = S::Node> {
+        self.subject.set((container.clone(), |c, _| Some(c.clone())))
+        .unwrap_or_else(|err| panic!("subject already set {:?} {:?}", self.key(), err))
+    }
+
+    pub fn set_selector(
+        &mut self, 
+        container: &A::Node, 
+        selector: fn(&A::Node, L::State) -> Option<S::Node>,
+    ) {
+        self.subject.set((container.clone(), selector))
+        .unwrap_or_else(|err| panic!("selector already set {:?} {:?}", self.key(), err))
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Default for ProxyNode<A, L, S> {
+    fn default() -> Self { Self::new(Key::default(), 0, None) }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Accessor for ProxyNode<A, L, S> {
+    type State = Proxy<A, L, S>;
+    type Message = L::Message;    
+    type Node = Self;
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Fallback for ProxyNode<A, L, S> {    
+    fn fallback(&self, message: Self::Message, delta: Option<f32>) {
+        self.locate.handle(message, delta)
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> System for ProxyNode<A, L, S> {    
+    fn handle(&self, message: Self::Message, delta: Option<f32>) {
+        self.fallback(message, delta);
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Node<Proxy<A, L, S>> for ProxyNode<A, L, S> {    
+    fn key(&self) -> Key { self.locate.key() }
+    fn emitter(&self) -> Option<&Emitter> { self.locate.emitter() }
+    fn clone_state(&self) -> Proxy<A, L, S> { 
+        Proxy { 
+            _phantom_a: Default::default(), 
+            _phantom_s: Default::default(), 
+            locate: self.locate.clone_state(), 
+        } 
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> NewNode<Proxy<A, L, S>> for ProxyNode<A, L, S> {    
+    fn new(
+        key: Key,
+        index: Index,
+        emitter: Option<Emitter>,
+    ) -> Self {                
+        Self { 
+            _phantom: Default::default(),
+            subject: OnceCell::new(),
+            locate: NewNode::new(key, index, emitter.clone()),
+        }
+    }
+}
+
+impl<A: Accessor, L: Accessor, S: Accessor> Consensus<Proxy<A, L, S>> for ProxyNode<A, L, S> 
+where 
+L::Node: Consensus<L::State>,
+Proxy<A, L, S>: State<Message = L::Message>,
+{     
     fn new_from(
         node: &Self,
         emitter: Option<Emitter>,
     ) -> Self {
         Self {
             _phantom: Default::default(),
-            key: node.key,
-            emitter,
             subject: node.subject.clone(),
+            locate: Consensus::new_from(&node.locate, emitter),
         }
     }
 
-    fn set_emitter(&mut self, emitter: Option<Emitter>) { self.emitter = emitter }
-    fn apply(&self, _message: ()) {}
-    fn apply_state(&self, _state: Proxy<A>) {}
+    fn set_emitter(&mut self, emitter: Option<Emitter>) { self.locate.set_emitter(emitter) }
+
+    fn apply(&self, message: L::Message) {
+        self.locate.apply(message)
+    }
+
+    fn apply_state(&self, state: Proxy<A, L, S>) {
+        self.locate.apply_state(state.locate)
+    }
 }

@@ -31,7 +31,11 @@ impl System for Sums {
 
             // values 의 index 번째 item 에 sum 이 emit 되었을 때
             // sums 의 index 번째 item 에 sum 을 emit
-            Values(Item((index, Sum(sum)))) => self.sums.item(index).emit(sum),            
+            Values(Item((index, Sum(sum)))) => {
+                if let Some(item) = self.sums.item(index) {
+                    item.emit(sum)
+                }
+            },            
 
             // sums 에 emit 되었을 때
             // sums 의 모든 값들을 Box에 모아 1초뒤에 그 합을 emit

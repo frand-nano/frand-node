@@ -25,6 +25,9 @@ impl Ui {
         let mut view = View::default();
         view.stopwatch.set_subject(&model.stopwatch);
         view.sums.set_subject(&model.sums);
+        view.selected_sum.set_selector(&model.sums, |sums, index| {
+            sums.values.active_item(index)           
+        });
         
         let mut view = Processor::<View>::new_with(
             view,
