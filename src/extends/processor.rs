@@ -319,32 +319,15 @@ where A::Node: Consensus<A::State> {
                     (self.update)(&self.process_node, message, None);
                 }
 
-                let packet = self.process_rx.try_recv();
-                let future = self.process_future_rx.try_recv();
-
-                match (&packet, &future) {
-                    (Err(_), Err(_)) => {
-                        self.processed.clear();
-                        ContextOrTask::Context(self)
-                    },
-                    _ => {
-                        if let Ok(packet) = packet {
-                            self.packets.push_back(packet);
-                            while let Ok(packet) = self.process_rx.try_recv() {
-                                self.packets.push_back(packet);
-                            }
-                        }
-
-                        if let Ok(future) = future {
-                            self.futures.push_back(future);
-                            while let Ok(future) = self.process_future_rx.try_recv() {
-                                self.futures.push_back(future);
-                            }
-                        }
-
-                        ContextOrTask::Task(self)
-                    },
+                while let Ok(packet) = self.process_rx.try_recv() {
+                    self.packets.push_back(packet);
                 }
+
+                while let Ok(future) = self.process_future_rx.try_recv() {
+                    self.futures.push_back(future);
+                }
+
+                ContextOrTask::Task(self)
             },
             None => {
                 self.processed.clear();
