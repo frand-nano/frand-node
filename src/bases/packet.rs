@@ -1,12 +1,21 @@
 use std::{fmt::Debug, io::Cursor, ops::{Add, Sub}, time::Instant};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::*;
 
+const COLLECTION_DEPTH_SIZE: usize = 4;
+
 pub type Index = u32;
+pub type IdDelta = u32;
 pub type Payload = Box<[u8]>;
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Id(u32);
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Key(u64, u64);
+pub struct Depth(usize);
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Key(Id, [Index; COLLECTION_DEPTH_SIZE]);
 
 #[derive(Debug, Clone)]
 pub struct Packet {
@@ -50,10 +59,10 @@ impl Packet {
     
     pub fn error(
         &self, 
-        index: Option<Index>,
+        id_delta: Option<IdDelta>,
         message: impl AsRef<str>,
     ) -> PacketError {
-        PacketError::new(self.clone(), index, message)
+        PacketError::new(self.clone(), id_delta, message)
     }
 }
 
@@ -85,47 +94,45 @@ impl PacketMessage {
     }
 }
 
-impl From<u128> for Key {
-    fn from(value: u128) -> Self {
-        Self((value >> 64) as u64, value as u64)
+impl Key {
+    pub fn id(&self) -> Id { self.0 }
+
+    pub fn index(&self, depth: Depth) -> Index { 
+        self.1[depth.0]
+    }
+
+    pub fn set_index(&mut self, depth: Depth, index: Index) { 
+        self.1[depth.0] = index;
     }
 }
 
-impl From<Key> for u128 {
-    fn from(value: Key) -> Self {
-        (value.0 as u128) << 64 | (value.1 as u128)
-    }
-}
-
-impl From<Key> for (u64, u64) {
-    fn from(value: Key) -> Self {
-        (value.0, value.1)
-    }
-}
-
-impl Add<Index> for Key {
+impl Add<IdDelta> for Key {
     type Output = Self;
-    fn add(self, rhs: Index) -> Self::Output {
-        let mut combined: u128 = self.into();
-        combined = combined.checked_add(rhs as u128).unwrap();
-        combined.into()
+    fn add(mut self, id_delta: IdDelta) -> Self::Output {
+        self.0 = self.0 + id_delta;
+        self
     }
 }
 
-impl Sub<Index> for Key {
-    type Output = Self;
-    fn sub(self, rhs: Index) -> Self::Output {
-        let mut combined: u128 = self.into();
-        combined = combined.checked_sub(rhs as u128).unwrap();
-        combined.into()
-    }
-}
-
-impl Sub for Key {
-    type Output = Index;
+impl Sub<Id> for Id {
+    type Output = IdDelta;
     fn sub(self, rhs: Self) -> Self::Output {
-        let mut combined: u128 = self.into();
-        combined = combined.checked_sub(rhs.into()).unwrap();
-        combined.try_into().unwrap()
+        self.0.checked_sub(rhs.0).unwrap()
+    }
+}
+
+impl Add<IdDelta> for Id {
+    type Output = Self;
+    fn add(mut self, id_delta: IdDelta) -> Self::Output {
+        self.0 = self.0.checked_add(id_delta).unwrap();
+        self
+    }
+}
+
+impl Add<usize> for Depth {
+    type Output = Self;
+    fn add(mut self, rhs: usize) -> Self::Output {
+        self.0 = self.0.checked_add(rhs).unwrap();
+        self
     }
 }

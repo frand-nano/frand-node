@@ -29,7 +29,8 @@ pub trait Node<S: State>: System {
 pub trait NewNode<S: State> {
     fn new(
         key: Key,
-        index: Index,
+        id_delta: IdDelta,
+        depth: Depth,
         emitter: Option<Emitter>,
     ) -> Self;
 }

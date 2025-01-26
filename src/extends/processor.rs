@@ -273,7 +273,11 @@ where A::Node: Consensus<A::State> {
                 if !self.processed.contains(&packet.key()) {
                     self.processed.insert(packet.key());
 
-                    let message = A::Message::from_packet_message(Key::default(), &packet)?;
+                    let message = A::Message::from_packet_message(
+                        Key::default(), 
+                        Depth::default(), 
+                        &packet,
+                    )?;
 
                     self.process_node.apply(message.clone());
                     
@@ -308,7 +312,11 @@ where A::Node: Consensus<A::State> {
                     self.processed.insert(future.0.into());
         
                     let packet = future.1.await;
-                    let message = A::Message::from_packet_message(Key::default(), &packet)?;
+                    let message = A::Message::from_packet_message(
+                        Key::default(),
+                        Depth::default(), 
+                        &packet,
+                    )?;
 
                     self.process_node.apply(message.clone());
             

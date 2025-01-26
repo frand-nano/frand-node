@@ -2,7 +2,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use super::*;
 
 pub trait State: Serialize + DeserializeOwned + Accessor<State = Self> + Emitable {
-    const NODE_SIZE: Index;
+    const NODE_SIZE: IdDelta;
 
     fn apply(&mut self, message: Self::Message);    
 

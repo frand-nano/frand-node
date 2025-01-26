@@ -32,7 +32,7 @@ macro_rules! impl_state_for {
             impl frand_node::macro_prelude::Emitable for $tys {}
 
             impl frand_node::macro_prelude::State for $tys {
-                const NODE_SIZE: frand_node::macro_prelude::Index = 1; 
+                const NODE_SIZE: frand_node::macro_prelude::IdDelta = 1; 
 
                 fn apply(
                     &mut self,  
@@ -51,30 +51,40 @@ macro_rules! impl_message_for {
             impl frand_node::macro_prelude::Message for $tys {
                 fn from_packet_message(
                     parent_key: frand_node::macro_prelude::Key,
+                    depth: frand_node::macro_prelude::Depth,
                     packet: &frand_node::macro_prelude::PacketMessage, 
                 ) -> core::result::Result<Self, frand_node::macro_prelude::MessageError> { 
-                    match packet.key() - parent_key {
+                    match packet.key().id() - parent_key.id() {
                         0 => Ok(unsafe { 
                             frand_node::macro_prelude::State::from_emitable(packet.payload()) 
                         }),
-                        index => Err(frand_node::macro_prelude::MessageError::new(
+                        id_delta => Err(frand_node::macro_prelude::MessageError::new(
                             packet.key(),
-                            Some(index),
-                            format!("{}: unknown index", std::any::type_name::<Self>()),
+                            Some(id_delta),
+                            format!(
+                                "{}: unknown id_delta, depth: {:?}", 
+                                std::any::type_name::<Self>(), 
+                                depth,
+                            ),
                         )),
                     }
                 }
 
                 fn from_packet(
                     parent_key: frand_node::macro_prelude::Key,
+                    depth: frand_node::macro_prelude::Depth,
                     packet: &frand_node::macro_prelude::Packet, 
                 ) -> core::result::Result<Self, frand_node::macro_prelude::PacketError> {
-                    Ok(match packet.key() - parent_key {
+                    Ok(match packet.key().id() - parent_key.id() {
                         0 => Ok(packet.read_state()),
-                        index => Err(frand_node::macro_prelude::PacketError::new(
+                        id_delta => Err(frand_node::macro_prelude::PacketError::new(
                             packet.clone(),
-                            Some(index),
-                            format!("{}: unknown index", std::any::type_name::<Self>()),
+                            Some(id_delta),
+                            format!(
+                                "{}: unknown id_delta, depth: {:?}", 
+                                std::any::type_name::<Self>(), 
+                                depth,
+                            ),
                         )),
                     }?)     
                 }

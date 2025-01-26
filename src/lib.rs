@@ -30,7 +30,7 @@ pub mod macro_prelude {
     pub use crate::{
         bases::{
             Consensus,
-            Result, Key, Index, 
+            Result, Key, Id, IdDelta, Depth, Index,
             Callback, FutureCallback, 
             Packet, PacketError, PacketMessage, MessageError,
         },

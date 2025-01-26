@@ -72,7 +72,7 @@ pub fn expand(
         quote!{ <<#ty as #mp::Accessor>::State as #mp::State>::NODE_SIZE }
     ).collect();
 
-    let node_indexes: Vec<_> = (0..fields.len()).into_iter()
+    let node_id_deltas: Vec<_> = (0..fields.len()).into_iter()
     .map(|index| {
         let mut tokens = quote!{1};
 
@@ -117,12 +117,12 @@ pub fn expand(
 
         mod #node_index_starts_name {
             #[allow(unused_imports)] use super::*;
-            #(pub const #upper_snake_names: #mp::Index = #node_indexes;)*
+            #(pub const #upper_snake_names: #mp::IdDelta = #node_id_deltas;)*
         }
 
         mod #node_index_ends_name {
             #[allow(unused_imports)] use super::*;
-            #(pub const #upper_snake_names: #mp::Index = #node_indexes + #node_sizes;)*
+            #(pub const #upper_snake_names: #mp::IdDelta = #node_id_deltas + #node_sizes;)*
         }
 
         impl #mp::Accessor for #state_name  {
@@ -134,7 +134,7 @@ pub fn expand(
         impl #mp::Emitable for #state_name {}
 
         impl #mp::State for #state_name {
-            const NODE_SIZE: #mp::Index = 1 #(+ #node_sizes)*;
+            const NODE_SIZE: #mp::IdDelta = 1 #(+ #node_sizes)*;
 
             fn apply(
                 &mut self,  
@@ -150,44 +150,56 @@ pub fn expand(
         impl #mp::Message for #message_name {
             fn from_packet_message(
                 parent_key: #mp::Key,
+                depth: #mp::Depth,
                 packet: &#mp::PacketMessage, 
             ) -> core::result::Result<Self, #mp::MessageError> {      
-                match packet.key() - parent_key {
+                match packet.key().id() - parent_key.id() {
                     0 => Ok(Self::State(unsafe { 
                         #mp::State::from_emitable(packet.payload()) 
                     })),
                     #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(#message_name::#pascal_names(
                         #message_tys::from_packet_message(
                             parent_key + #node_index_starts_name::#upper_snake_names, 
+                            depth,
                             packet,
                         )?
                     )),)*
-                    index => Err(#mp::MessageError::new(
+                    id_delta => Err(#mp::MessageError::new(
                         packet.key(),
-                        Some(index),
-                        format!("{}: unknown index", std::any::type_name::<Self>()),
+                        Some(id_delta),
+                        format!(
+                            "{}: unknown id_delta, depth: {:?}", 
+                            std::any::type_name::<Self>(), 
+                            depth,
+                        ),
                     )),
                 }    
             } 
 
             fn from_packet(
                 parent_key: #mp::Key,
+                depth: #mp::Depth,
                 packet: &#mp::Packet, 
             ) -> core::result::Result<Self, #mp::PacketError> {
-                Ok(match packet.key() - parent_key {
+                Ok(match packet.key().id() - parent_key.id() {
                     0 => Ok(Self::State(
                         packet.read_state()
                     )),
                     #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(
                         #message_name::#pascal_names(#message_tys::from_packet(
                             parent_key + #node_index_starts_name::#upper_snake_names, 
+                            depth,
                             packet, 
                         )?)
                     ),)*
-                    index => Err(#mp::PacketError::new(
+                    id_delta => Err(#mp::PacketError::new(
                         packet.clone(),
-                        Some(index),
-                        format!("{}: unknown index", std::any::type_name::<Self>()),
+                        Some(id_delta),
+                        format!(
+                            "{}: unknown id_delta, depth: {:?}", 
+                            std::any::type_name::<Self>(), 
+                            depth,
+                        ),
                     )),
                 }?)     
             }
@@ -204,7 +216,12 @@ pub fn expand(
         }
 
         impl Default for #node_name { 
-            fn default() -> Self { Self::new(#mp::Key::default(), 0, None) }
+            fn default() -> Self { Self::new(
+                #mp::Key::default(), 
+                #mp::IdDelta::default(), 
+                #mp::Depth::default(), 
+                None,
+            ) }
         }
 
         impl #mp::Accessor for #node_name  {
@@ -236,16 +253,17 @@ pub fn expand(
         impl #mp::NewNode<#state_name> for #node_name { 
             fn new(
                 mut key: #mp::Key,
-                index: #mp::Index,
+                id_delta: #mp::IdDelta,
+                depth: #mp::Depth,
                 emitter: Option<#mp::Emitter>,
             ) -> Self {
-                key = key + index;
+                key = key + id_delta;
 
                 Self { 
                     key,   
                     emitter: emitter.clone(),
                     #(#names: #mp::NewNode::new(
-                        key, #node_index_starts_name::#upper_snake_names, emitter.clone(),
+                        key, #node_index_starts_name::#upper_snake_names, depth, emitter.clone(),
                     ),)*
                 }
             }

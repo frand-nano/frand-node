@@ -3,8 +3,9 @@ use bases::*;
 use extends::AtomicNode;
 use crate::*;
 
-const IS_SOME_INDEX: Index = 1;
-const ITEM_INDEX: Index = 2;
+const IS_SOME_DELTA: IdDelta = 1;
+const ITEM_DELTA: IdDelta = 2;
+const NODE_SIZE: IdDelta = 2;
 
 #[derive(Debug, Clone)]
 pub enum OptionMessage<A: Accessor> {
@@ -30,7 +31,7 @@ impl<A: Accessor> Accessor for Option<A> {
 impl<S: State> Emitable for Option<S> {}
 
 impl<S: State> State for Option<S> {
-    const NODE_SIZE: Index = 1 + <bool as State>::NODE_SIZE + S::NODE_SIZE; 
+    const NODE_SIZE: IdDelta = NODE_SIZE + S::NODE_SIZE; 
 
     fn apply(
         &mut self,  
@@ -56,21 +57,24 @@ impl<S: State> State for Option<S> {
 impl<S: State> Message for OptionMessage<S> {
     fn from_packet_message(
         parent_key: Key,
+        depth: Depth,
         packet: &PacketMessage, 
     ) -> Result<Self, MessageError> {     
-        match packet.key() - parent_key {
+        match packet.key().id() - parent_key.id() {
             0 => Ok(Self::State(unsafe { 
                 State::from_emitable(packet.payload()) 
             })),
-            IS_SOME_INDEX => Ok(Self::IsSome(
+            IS_SOME_DELTA => Ok(Self::IsSome(
                 <bool as Accessor>::Message::from_packet_message(
-                    parent_key + IS_SOME_INDEX,
+                    parent_key + IS_SOME_DELTA,
+                    depth,
                     packet, 
                 )?
             )),
             _ => Ok(Self::Item(
                 S::Message::from_packet_message(
-                    parent_key + ITEM_INDEX,
+                    parent_key + ITEM_DELTA,
+                    depth,
                     packet,
                 ).ok()
             )),
@@ -79,21 +83,24 @@ impl<S: State> Message for OptionMessage<S> {
 
     fn from_packet(
         parent_key: Key,
+        depth: Depth,
         packet: &Packet, 
     ) -> Result<Self, PacketError> {        
-        match packet.key() - parent_key {
+        match packet.key().id() - parent_key.id() {
             0 => Ok(Self::State(
                 packet.read_state()
             )),
-            IS_SOME_INDEX => Ok(Self::IsSome(
+            IS_SOME_DELTA => Ok(Self::IsSome(
                 <bool as Accessor>::Message::from_packet(
-                    parent_key + IS_SOME_INDEX,
+                    parent_key + IS_SOME_DELTA,
+                    depth,
                     packet, 
                 )?
             )),
             _ => Ok(Self::Item(
                 S::Message::from_packet(
-                    parent_key + ITEM_INDEX,
+                    parent_key + ITEM_DELTA,
+                    depth,
                     packet,
                 ).ok()
             )),
@@ -124,7 +131,12 @@ impl<S: State> OptionNode<S> {
 
 impl<S: State> Default for OptionNode<S> 
 where Option<S>: State<Message = OptionMessage<S>> {    
-    fn default() -> Self { Self::new(Key::default(), 0, None) }
+    fn default() -> Self { Self::new(
+        Key::default(), 
+        IdDelta::default(), 
+        Depth::default(), 
+        None,
+    ) }
 }
 
 impl<S: State> Accessor for OptionNode<S>  {
@@ -168,16 +180,17 @@ impl<S: State> NewNode<Option<S>> for OptionNode<S>
 where Option<S>: State<Message = OptionMessage<S>> {  
     fn new(
         mut key: Key,
-        index: Index,
+        id_delta: IdDelta,
+        depth: Depth,
         emitter: Option<Emitter>,
     ) -> Self {        
-        key = key + index;
+        key = key + id_delta;
         
         Self { 
             key,   
             emitter: emitter.clone(),
-            is_some: NewNode::new(key, IS_SOME_INDEX, emitter.clone()),
-            item: NewNode::new(key, ITEM_INDEX, emitter.clone()),
+            is_some: NewNode::new(key, IS_SOME_DELTA, depth, emitter.clone()),
+            item: NewNode::new(key, ITEM_DELTA, depth, emitter.clone()),
         }
     }
 }

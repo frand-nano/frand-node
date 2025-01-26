@@ -14,26 +14,26 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub struct PacketError {
     packet: Packet,
-    index: Option<Index>,
+    id_delta: Option<IdDelta>,
     message: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct MessageError {
     key: Key,
-    index: Option<Index>,
+    id_delta: Option<IdDelta>,
     message: String,
 }
 
 impl PacketError {
     pub fn new(
         packet: Packet,
-        index: Option<Index>,
+        id_delta: Option<IdDelta>,
         message: impl AsRef<str>,
     ) -> Self {
         Self {
             packet,
-            index,
+            id_delta,
             message: message.as_ref().to_string(),
         }
     }
@@ -42,12 +42,12 @@ impl PacketError {
 impl MessageError {
     pub fn new(
         key: Key,
-        index: Option<Index>,
+        id_delta: Option<IdDelta>,
         message: impl AsRef<str>,
     ) -> Self {
         Self {
             key,
-            index,
+            id_delta,
             message: message.as_ref().to_string(),
         }
     }
@@ -71,13 +71,13 @@ impl Display for Error {
 
 impl Display for PacketError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} index:{:?} packet:{:?}", self.message, self.index, self.packet)
+        write!(f, "{} id_delta:{:?} packet:{:?}", self.message, self.id_delta, self.packet)
     }
 }
 
 impl Display for MessageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} index:{:?} key:{:?}", self.message, self.index, self.key)
+        write!(f, "{} id_delta:{:?} key:{:?}", self.message, self.id_delta, self.key)
     }
 }
 
@@ -100,9 +100,9 @@ impl From<MessageError> for Error {
 impl From<crossbeam::channel::SendError<PacketMessage>> for MessageError {
     fn from(packet: crossbeam::channel::SendError<PacketMessage>) -> Self {
         MessageError {
-            message: format!("{}", packet),
             key: packet.0.key(),
-            index: None,
+            id_delta: None,
+            message: format!("{}", packet),
         }
     }
 }
@@ -110,9 +110,9 @@ impl From<crossbeam::channel::SendError<PacketMessage>> for MessageError {
 impl From<tokio::sync::mpsc::error::SendError<PacketMessage>> for MessageError {
     fn from(packet: tokio::sync::mpsc::error::SendError<PacketMessage>) -> Self {
         MessageError {
-            message: format!("{}", packet),
             key: packet.0.key(),
-            index: None,
+            id_delta: None,
+            message: format!("{}", packet),
         }
     }
 }
@@ -121,7 +121,7 @@ impl From<crossbeam::channel::SendError<FutureMessage>> for MessageError {
     fn from(packet: crossbeam::channel::SendError<FutureMessage>) -> Self {
         MessageError {
             key: packet.0.0,
-            index: None,
+            id_delta: None,
             message: format!("future"),
         }
     }
@@ -131,7 +131,7 @@ impl From<tokio::sync::mpsc::error::SendError<FutureMessage>> for MessageError {
     fn from(packet: tokio::sync::mpsc::error::SendError<FutureMessage>) -> Self {
         MessageError {
             key: packet.0.0,
-            index: None,
+            id_delta: None,
             message: format!("future"),
         }
     }

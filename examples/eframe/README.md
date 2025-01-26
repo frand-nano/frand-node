@@ -15,13 +15,11 @@ impl System for Sums {
             Values(Push(_)) => self.sums.emit_push(Default::default()),
             Values(Pop(_)) => self.sums.emit_pop(),
 
-            // sums 에 push 또는 pop 이 emit 되면 values 에 push 또는 pop 을 emit 하여 길이 동기화
-            Sums(Push(_)) => self.values.emit_push(Default::default()),
-            Sums(Pop(_)) => self.values.emit_pop(),
-
             // values 의 index 번째 item 에 sum 이 emit 되었을 때
             // sums 의 index 번째 item 에 sum 을 emit
-            Values(Item((index, Sum(sum)))) => self.sums.items()[index as usize].emit(sum),            
+            Values(Item((index, Sum(sum)))) => {
+                self.sums.item(index).emit(sum)
+            },            
 
             // sums 에 emit 되었을 때
             // sums 의 모든 값들을 Box에 모아 1초뒤에 그 합을 emit

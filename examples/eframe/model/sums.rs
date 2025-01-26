@@ -25,16 +25,10 @@ impl System for Sums {
             Values(Push(_)) => self.sums.emit_push(Default::default()),
             Values(Pop(_)) => self.sums.emit_pop(),
 
-            // sums 에 push 또는 pop 이 emit 되면 values 에 push 또는 pop 을 emit 하여 길이 동기화
-            Sums(Push(_)) => self.values.emit_push(Default::default()),
-            Sums(Pop(_)) => self.values.emit_pop(),
-
             // values 의 index 번째 item 에 sum 이 emit 되었을 때
             // sums 의 index 번째 item 에 sum 을 emit
             Values(Item((index, Sum(sum)))) => {
-                if let Some(item) = self.sums.item(index) {
-                    item.emit(sum)
-                }
+                self.sums.item(index).emit(sum)
             },            
 
             // sums 에 emit 되었을 때
@@ -61,16 +55,16 @@ impl Widget for &Sums {
             ui.label("A 1-second delay is applied to all addition");
 
             ui.horizontal(|ui| {
-                let len = self.sums.len();
+                let len = self.values.len();
     
                 if ui.button(format!(" - ")).clicked() {
-                    self.sums.emit_pop();
+                    self.values.emit_pop();
                 }
     
                 ui.label(format!(" len: {len} "));
     
                 if ui.button(format!(" + ")).clicked() {
-                    self.sums.emit_push(0);
+                    self.values.emit_push(Default::default());
                 }
             });
 

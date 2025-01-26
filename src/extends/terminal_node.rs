@@ -19,7 +19,12 @@ impl<S: State> TerminalNode<S> {
 
 impl<S: State + Message> Default for TerminalNode<S> 
 where S: State<Message = S> {    
-    fn default() -> Self { Self::new(Key::default(), 0, None) }
+    fn default() -> Self { Self::new(
+        Key::default(), 
+        IdDelta::default(), 
+        Depth::default(), 
+        None,
+    ) }
 }
 
 impl<S: State + Message> Accessor for TerminalNode<S>  
@@ -50,10 +55,11 @@ impl<S: State + Message> NewNode<S> for TerminalNode<S>
 where S: State<Message = S> {    
     fn new(
         mut key: Key,
-        index: Index,
+        id_delta: IdDelta,
+        _depth: Depth,
         emitter: Option<Emitter>,
     ) -> Self {
-        key = key + index;
+        key = key + id_delta;
         
         Self { 
             key,   

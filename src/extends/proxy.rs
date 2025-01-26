@@ -37,7 +37,7 @@ impl<A: Accessor, L: Accessor, S: Accessor> Accessor for Proxy<A, L, S> {
 impl<A: Accessor, L: Accessor, S: Accessor> Emitable for Proxy<A, L, S> {}
 
 impl<A: Accessor, L: Accessor, S: Accessor> State for Proxy<A, L, S> {
-    const NODE_SIZE: Index = <L::State as State>::NODE_SIZE; 
+    const NODE_SIZE: IdDelta = <L::State as State>::NODE_SIZE; 
 
     fn apply(
         &mut self,  
@@ -74,7 +74,12 @@ impl<A: Accessor, L: Accessor, S: Accessor> ProxyNode<A, L, S> {
 }
 
 impl<A: Accessor, L: Accessor, S: Accessor> Default for ProxyNode<A, L, S> {
-    fn default() -> Self { Self::new(Key::default(), 0, None) }
+    fn default() -> Self { Self::new(
+        Key::default(), 
+        IdDelta::default(), 
+        Depth::default(), 
+        None,
+    ) }
 }
 
 impl<A: Accessor, L: Accessor, S: Accessor> Accessor for ProxyNode<A, L, S> {
@@ -110,13 +115,14 @@ impl<A: Accessor, L: Accessor, S: Accessor> Node<Proxy<A, L, S>> for ProxyNode<A
 impl<A: Accessor, L: Accessor, S: Accessor> NewNode<Proxy<A, L, S>> for ProxyNode<A, L, S> {    
     fn new(
         key: Key,
-        index: Index,
+        id_delta: IdDelta,
+        depth: Depth,
         emitter: Option<Emitter>,
     ) -> Self {                
         Self { 
             _phantom: Default::default(),
             subject: OnceCell::new(),
-            locate: NewNode::new(key, index, emitter.clone()),
+            locate: NewNode::new(key, id_delta, depth, emitter.clone()),
         }
     }
 }

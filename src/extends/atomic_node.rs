@@ -15,7 +15,12 @@ impl<S: State, A: AtomicState<S>> AtomicNode<S, A> {
 
 impl<S: State + Message, A: AtomicState<S>> Default for AtomicNode<S, A> 
 where S: State<Message = S, Node = Self> {
-    fn default() -> Self { Self::new(Key::default(), 0, None) }
+    fn default() -> Self { Self::new(
+        Key::default(), 
+        IdDelta::default(), 
+        Depth::default(), 
+        None,
+    ) }
 }
 
 impl<S: State + Message, A: AtomicState<S>> Accessor for AtomicNode<S, A> 
@@ -46,10 +51,11 @@ impl<S: State + Message, A: AtomicState<S>> NewNode<S> for AtomicNode<S, A>
 where S: State<Message = S, Node = Self> {  
     fn new(
         mut key: Key,
-        index: Index,
+        id_delta: IdDelta,
+        _depth: Depth,
         emitter: Option<Emitter>,
     ) -> Self {
-        key = key + index;
+        key = key + id_delta;
         
         Self { 
             _phantom: Default::default(),
@@ -91,7 +97,7 @@ macro_rules! impl_atomic_state_for {
             impl Emitable for $tys {}
 
             impl State for $tys {
-                const NODE_SIZE: Index = 1; 
+                const NODE_SIZE: IdDelta = 1; 
 
                 fn apply(
                     &mut self,  
