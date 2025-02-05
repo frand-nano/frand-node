@@ -1,40 +1,23 @@
-use std::{any::Any, fmt::Debug, future::Future};
-use super::*;
+use std::{fmt::Debug, future::Future};
+use crate::ext::*;
 
-#[derive(Debug, Clone)]
-pub struct Emitter {
-    callback: Callback,
-    carry_callback: Callback,
-    future_callback: FutureCallback,
-}
+pub trait Emitter<S: State>: Debug + Clone + Send + Sync {
+    fn callback(&self) -> &Callback<S::Message>;
 
-impl Emitter {
-    pub fn new(
-        callback: Callback,
-        carry_callback: Callback,
-        future_callback: FutureCallback,
-    ) -> Self {
-        Self { 
-            callback, 
-            carry_callback, 
-            future_callback, 
-        }
+    fn new(
+        callback: Callback<S::Message>,
+    ) -> Self;
+    
+    fn emit(&self, alt: &Alt, state: S) {
+        self.callback().emit(alt, state.into_message());
     }
 
-    pub fn emit<S: State>(&self, key: Key, state: S) {
-        self.callback.emit(key, state)
+    fn emit_carry(&self, alt: &Alt, state: S) {
+        self.callback().emit_carry(alt, state.into_message());
     }
 
-    pub fn emit_carry<S: State>(&self, key: Key, state: S) {
-        self.carry_callback.emit(key, state)
+    fn emit_future<F>(&self, alt: &Alt, future: F) 
+    where F: Future<Output = S::Message> + 'static + Send + Sync {
+        self.callback().emit_future(alt, future);
     }
-
-    pub fn emit_future<S: State, Fu>(&self, key: Key, future: Fu) 
-    where Fu: 'static + Future<Output = S> + Send {
-        self.future_callback.emit(key, future)
-    }
-}
-
-pub trait Emitable: 'static + Debug + Send + Sync + Any {
-
 }

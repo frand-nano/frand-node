@@ -1,13 +1,22 @@
-use super::Accessor;
+use crate::ext::*;
 
-pub trait Fallback: Accessor {
-    fn fallback(&self, message: Self::Message, delta: Option<f32>);
+pub trait Fallback: State {
+    #[allow(unused_variables)]
+    fn fallback<CS: System>(
+        node: Self::Node<'_, CS>, 
+        message: &Self::Message, 
+        delta: Option<std::time::Duration>,
+    ) {}
 }
 
 pub trait System: Fallback {
-    fn handle(&self, message: Self::Message, delta: Option<f32>) {
+    fn handle<CS: System>(
+        node: Self::Node<'_, CS>, 
+        message: &Self::Message, 
+        delta: Option<std::time::Duration>,
+    ) {
         match message {
-            message => self.fallback(message, delta)
+            message => Self::fallback(node, message, delta),
         }        
     }
 }

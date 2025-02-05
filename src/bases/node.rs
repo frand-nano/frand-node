@@ -1,36 +1,36 @@
-use std::future::Future;
-use super::*;
+use std::{fmt::Debug, future::Future, ops::Deref, sync::{Arc, RwLockReadGuard}};
+use crate::ext::*;
 
-pub trait Node<S: State>: System {   
-    fn key(&self) -> Key;
-    fn emitter(&self) -> Option<&Emitter>;
-    fn clone_state(&self) -> S;
+pub trait Node<'n, S: State>: Debug + Deref<Target = S> {
+    fn alt(&self) -> &Alt;
+    fn emitter(&self) -> &S::Emitter;
+
+    fn consist(&self) -> &Consist { self.emitter().callback().consist() }
 
     fn emit(&self, state: S) {
-        if let Some(emitter) = self.emitter() {
-            emitter.emit(self.key(), state)
-        }
+        Emitter::emit(self.emitter(), self.alt(), state);
     }
 
     fn emit_carry(&self, state: S) {
-        if let Some(emitter) = self.emitter() {
-            emitter.emit_carry(self.key(), state)
-        }
+        Emitter::emit_carry(self.emitter(), self.alt(), state);
     }
 
-    fn emit_future<Fu>(&self, future: Fu) 
-    where Fu: 'static + Future<Output = S> + Send {
-        if let Some(emitter) = self.emitter() {
-            emitter.emit_future(self.key(), future)
-        }
+    fn emit_future<F>(&self, future: F) 
+    where F: Future<Output = S::Message> + 'static + Send + Sync {
+        Emitter::emit_future(self.emitter(), self.alt(), future);
     }
 }
 
-pub trait NewNode<S: State> {
+pub trait NewNode<'n, S: State, CS: System> {
     fn new(
-        key: Key,
-        id_delta: IdDelta,
-        depth: Depth,
-        emitter: Option<Emitter>,
+        emitter: &'n S::Emitter,
+        accesser: &'n S::Accesser<CS>,
+        consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
+        alt: &'n Alt,        
     ) -> Self;
+
+    fn new_alt(
+        &self,
+        alt: Alt,   
+    ) -> ConsensusRead<'n, S, CS>;
 }

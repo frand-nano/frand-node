@@ -1,21 +1,19 @@
 use std::fmt::Debug;
-use super::*;
+use crate::ext::*;
 
-pub trait Message: 'static + Debug + Clone + Sized + Send + Sync {   
-    fn from_packet_message(
-        parent_key: Key,
-        depth: Depth,
-        packet: &PacketMessage, 
-    ) -> Result<Self, MessageError>;
+pub trait Message: 'static + Debug + Clone + Sized + Send + Sync + Unpin {
+    type State: State<Message = Self>;
 
     fn from_packet(
+        packet: &Packet,
         parent_key: Key,
-        depth: Depth,
-        packet: &Packet, 
-    ) -> Result<Self, PacketError>;
-
+        depth: usize,
+    ) -> Result<Self>;
+    
     fn to_packet(
-        &self,
-        key: Key, 
-    ) -> Result<Packet, MessageError>;
+        &self, 
+        key: Key,
+    ) -> Packet;
+
+    fn apply_to(&self, state: &mut Self::State);   
 }

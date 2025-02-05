@@ -7,33 +7,41 @@
 pub use prelude::*;
 
 pub mod bases;
-pub mod extends;
+pub mod terminal;
+pub mod vec;
 
 pub mod prelude {
     pub use frand_node_macro::*;
-    
-    pub use crate::{
-        bases::{
-            Accessor, State, Message, Node, NewNode, Emitable, Fallback, System,
-            Emitter, 
-        },
-        extends::{
-            Processor, Proxy, OptionNode, VecNode,
-            OptionMessage, VecMessage,
-        },
+
+    pub use crate::bases::{
+        state::State,
+        message::Message,
+        consensus::Consensus,
+        node::Node,
+        system::{Fallback, System},
+        component::Component,
     };
 }
 
-pub mod macro_prelude {
-    pub use crate::prelude::*;
-
+pub mod ext {
     pub use crate::{
+        prelude::*,
         bases::{
-            Consensus,
-            Result, Key, Id, IdDelta, Depth, Index,
-            Callback, FutureCallback, 
-            Packet, PacketError, PacketMessage, MessageError,
+            packet::{IdDelta, IdSize, AltIndex, AltSize, Key, Consist, Id, AltDepth, Alt, Payload, Packet, MessagePacket},
+            callback::Callback,
+            emitter::Emitter,
+            accesser::{Accesser, RcAccess},
+            consensus_read::ConsensusRead,
+            node::NewNode,
+            result::{Result, PacketError},
         },
-        extends::TerminalNode,
+        terminal::terminal,
+        vec::vec,
     };
+}
+
+mod frand_node {
+    pub mod ext {
+        pub use crate::ext::*;
+    }
 }

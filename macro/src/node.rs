@@ -4,34 +4,44 @@ use quote::{quote, ToTokens};
 use convert_case::{Case, Casing};
 
 pub fn expand(
-    mut state: ItemStruct,
+    state: ItemStruct,
 ) -> Result<TokenStream> {    
-    let mp = quote!{ frand_node::macro_prelude };
-
+    let ext = quote!{ frand_node::ext };
     let vis = &state.vis;
-    let node_name = state.ident.clone();
+    let state_name = state.ident.clone();
 
-    let state_name = Ident::new(
-        &format!("{}State", node_name.to_string()).to_case(Case::Pascal), 
-        node_name.span(),
+    let state_snake_name = Ident::new(
+        &state_name.to_string().to_case(Case::Snake), 
+        state_name.span(),
     );
 
-    state.ident = state_name.clone();
-
-    let message_name = Ident::new(
-        &format!("{}Message", node_name.to_string()).to_case(Case::Pascal), 
-        node_name.span(),
+    let impl_params = state.generics.params.clone();
+    let ty_params = impl_params.iter().map(|param|
+        match param {
+            GenericParam::Type(ty) => ty.ident.to_token_stream(),
+            GenericParam::Lifetime(lifetime) => lifetime.lifetime.to_token_stream(),
+            GenericParam::Const(const_param) => const_param.ident.to_token_stream(),
+        }
     );
+    let ty_params = quote! {
+        #(#ty_params,)*
+    };
 
-    let node_index_starts_name = Ident::new(
-        &format!("{}IndexStarts", node_name.to_string()).to_case(Case::Snake), 
-        node_name.span(),
-    );
+    let impl_generics = {
+        let lt_token = state.generics.lt_token.clone();
+        let gt_token = state.generics.gt_token.clone();
+        quote! {
+            #lt_token #impl_params #gt_token
+        }
+    };
 
-    let node_index_ends_name = Ident::new(
-        &format!("{}IndexEnds", node_name.to_string()).to_case(Case::Snake), 
-        node_name.span(),
-    );
+    let ty_generics = {
+        let lt_token = state.generics.lt_token.clone();
+        let gt_token = state.generics.gt_token.clone();
+        quote! {
+            #lt_token #ty_params #gt_token
+        }
+    };
 
     let fields: Vec<&Field> = match &state.fields {
         Fields::Named(fields_named) => fields_named.named.iter().collect(),
@@ -42,39 +52,31 @@ pub fn expand(
     let names: Vec<_> = fields.iter().filter_map(|field| field.ident.as_ref()).collect();
     let tys: Vec<_> = fields.iter().map(|field| &field.ty).collect();
 
-    let pascal_names: Vec<_> = fields.iter().filter_map(|field| 
+    let id_delta_names: Vec<_> = fields.iter().filter_map(|field| 
         field.ident.as_ref().map(|name| {
             Ident::new(
-                &name.to_string().to_case(Case::Pascal), 
+                &format!("{}IdDelta", name.to_string()).to_case(Case::UpperSnake), 
                 name.span(),
             )
         })        
     ).collect();
 
-    let upper_snake_names: Vec<_> = fields.iter().filter_map(|field| 
+    let id_delta_end_names: Vec<_> = fields.iter().filter_map(|field| 
         field.ident.as_ref().map(|name| {
             Ident::new(
-                &name.to_string().to_case(Case::UpperSnake), 
+                &format!("{}IdDeltaEnd", name.to_string()).to_case(Case::UpperSnake), 
                 name.span(),
             )
         })        
-    ).collect();
-
-    let message_tys: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <#ty as #mp::Accessor>::Message }
-    ).collect();
-
-    let node_tys: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <#ty as #mp::Accessor>::Node }
     ).collect();
 
     let node_sizes: Vec<_> = tys.iter().map(|ty| 
-        quote!{ <<#ty as #mp::Accessor>::State as #mp::State>::NODE_SIZE }
+        quote!{ <#ty as #ext::State>::NODE_SIZE }
     ).collect();
 
-    let node_id_deltas: Vec<_> = (0..fields.len()).into_iter()
+    let id_deltas: Vec<_> = (0..fields.len()).into_iter()
     .map(|index| {
-        let mut tokens = quote!{1};
+        let mut tokens = quote!{ 1 };
 
         for i in 0..index {
             let node_size = &node_sizes[i];
@@ -84,220 +86,238 @@ pub fn expand(
         }
 
         tokens
-    }).collect(); 
-
-    let state_attrs = state.attrs;
-    let state_generics = state.generics;
-    let state_fields: Vec<_> = fields.iter().map(|field| {
-        let attrs = &field.attrs;
-        let vis = &field.vis;
-        let ident = &field.ident;
-        let ty = &field.ty;
-        quote! { #(#attrs)* #vis #ident: <#ty as #mp::Accessor>::State }
     }).collect();
 
-    Ok(quote!{        
-        #(#state_attrs)*
-        #vis struct #state_name #state_generics {
-            #(#state_fields,)*
+    let pascal_names: Vec<_> = fields.iter().filter_map(|field| 
+        field.ident.as_ref().map(|name| {
+            Ident::new(
+                &name.to_string().to_case(Case::Pascal), 
+                name.span(),
+            )
+        })        
+    ).collect();
+
+    let message_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #ext::State>::Message }
+    ).collect();
+
+    let accesser_tys: Vec<_> = tys.iter().map(|ty| 
+        quote!{ <#ty as #ext::State>::Accesser }
+    ).collect();
+    
+    Ok(quote!{       
+        impl #impl_generics #ext::State for #state_name #ty_generics {
+            const NODE_SIZE: #ext::IdSize = 1 #(+ #node_sizes)*;
+            const NODE_ALT_SIZE: #ext::AltSize = 0;
+    
+            type Message = #state_snake_name::Message #ty_generics;
+            type Emitter = #state_snake_name::Emitter #ty_generics;
+            type Accesser<CS: #ext::System> = #state_snake_name::Accesser<CS, #ty_params>;
+            type Node<'n, CS: #ext::System> = #state_snake_name::Node<'n, CS, #ty_params>;
+
+            fn from_payload(payload: &#ext::Payload) -> Self {
+                #ext::Payload::to_state(payload)
+            }
+
+            fn to_payload(&self) -> #ext::Payload {
+                #ext::Payload::from_state(self)
+            }       
+                    
+            fn into_message(self) -> Self::Message {
+                #state_snake_name::Message::State(self)
+            }  
         }
 
-        #[derive(Debug, Clone)]
-        #vis enum #message_name {
-            #(#[allow(non_camel_case_types)] #pascal_names(#[allow(dead_code)] #message_tys),)*
-            #[allow(non_camel_case_types)] State(#[allow(dead_code)] #state_name),
-        }
+        #vis mod #state_snake_name {
+            use super::*;
 
-        #[derive(Debug, Clone)]
-        #vis struct #node_name {
-            key: #mp::Key,
-            emitter: Option<#mp::Emitter>,
-            #(#viss #names: #node_tys,)*
-        }
+            #(
+                const #id_delta_names: #ext::IdDelta = #id_deltas;
+                const #id_delta_end_names: #ext::IdDelta = #id_delta_names + #node_sizes;
+            )*
+            
+            #[derive(Debug, Clone)]
+            pub enum Message #impl_generics {
+                #(#pascal_names(#[allow(dead_code)] #message_tys),)*
+                State(#[allow(dead_code)] #state_name #ty_generics),
+            }
 
-        mod #node_index_starts_name {
-            #[allow(unused_imports)] use super::*;
-            #(pub const #upper_snake_names: #mp::IdDelta = #node_id_deltas;)*
-        }
+            #[derive(Debug, Clone)]
+            pub struct Emitter #impl_generics {
+                callback: #ext::Callback<Message #ty_generics>,
+                #(#viss #names: <#tys as #ext::State>::Emitter,)*
+            }
 
-        mod #node_index_ends_name {
-            #[allow(unused_imports)] use super::*;
-            #(pub const #upper_snake_names: #mp::IdDelta = #node_id_deltas + #node_sizes;)*
-        }
+            #[derive(Debug, Clone)]
+            pub struct Accesser<CS: #ext::System, #impl_params> {
+                access: #ext::RcAccess<#state_name #ty_generics, CS>,
+                #(#viss #names: #accesser_tys<CS>,)*
+            }
 
-        impl #mp::Accessor for #state_name  {
-            type State = Self;
-            type Message = #message_name;
-            type Node = #node_name;
-        }
-
-        impl #mp::Emitable for #state_name {}
-
-        impl #mp::State for #state_name {
-            const NODE_SIZE: #mp::IdDelta = 1 #(+ #node_sizes)*;
-
-            fn apply(
-                &mut self,  
-                message: Self::Message,
-            ) {
-                match message {
-                    #(Self::Message::#pascal_names(message) => self.#names.apply(message),)*
-                    Self::Message::State(state) => *self = state,
+            #[derive(Debug)]
+            pub struct Node<'n, CS: #ext::System, #impl_params> {
+                emitter: &'n Emitter #ty_generics,
+                accesser: &'n Accesser<CS, #ty_params>,
+                consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,                
+                alt: &'n #ext::Alt,      
+                #(#viss #names: <#tys as #ext::State>::Node<'n, CS>,)*
+            }
+        
+            impl #impl_generics #ext::Fallback for #state_name #ty_generics {
+                fn fallback<CS: #ext::System>(
+                    node: Node<'_, CS, #ty_params>, 
+                    message: &Message #ty_generics, 
+                    delta: Option<std::time::Duration>,
+                ) {
+                    match message {
+                        #(Message::#pascal_names(message) => <#tys>::handle(node.#names, message, delta),)*
+                        Message::State(_) => (),
+                    } 
                 }
             }
-        }
 
-        impl #mp::Message for #message_name {
-            fn from_packet_message(
-                parent_key: #mp::Key,
-                depth: #mp::Depth,
-                packet: &#mp::PacketMessage, 
-            ) -> core::result::Result<Self, #mp::MessageError> {      
-                match packet.key().id() - parent_key.id() {
-                    0 => Ok(Self::State(unsafe { 
-                        #mp::State::from_emitable(packet.payload()) 
-                    })),
-                    #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(#message_name::#pascal_names(
-                        #message_tys::from_packet_message(
-                            parent_key + #node_index_starts_name::#upper_snake_names, 
-                            depth,
-                            packet,
-                        )?
-                    )),)*
-                    id_delta => Err(#mp::MessageError::new(
-                        packet.key(),
-                        Some(id_delta),
-                        format!(
-                            "{}: unknown id_delta, depth: {:?}", 
-                            std::any::type_name::<Self>(), 
-                            depth,
+            impl #impl_generics #ext::Message for Message #ty_generics {    
+                type State = #state_name #ty_generics;
+
+                fn from_packet(
+                    packet: &#ext::Packet,
+                    parent_key: #ext::Key,
+                    depth: usize,                
+                ) -> #ext::Result<Self> {
+                    Ok(match packet.key().consist().id() - parent_key.consist().id() {
+                        0 => Ok(Self::State(
+                            #ext::State::from_payload(packet.payload())
+                        )),
+                        #(#id_delta_names..#id_delta_end_names => Ok(
+                            Message::#pascal_names(#message_tys::from_packet(
+                                packet, 
+                                #ext::Key::new(
+                                    parent_key.consist().access(#id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE),
+                                    parent_key.alt(),
+                                ), 
+                                depth + 1,
+                            )?)
+                        ),)*
+                        id_delta => Err(#ext::PacketError::new(
+                            packet.clone(),
+                            Some(id_delta),
+                            Some(depth),
+                            format!(
+                                "{}: unknown id_delta", 
+                                std::any::type_name::<Self>(), 
+                            ),
+                        )),
+                    }?)  
+                }     
+
+                fn to_packet(
+                    &self, 
+                    key: #ext::Key,
+                ) -> #ext::Packet {     
+                    match self {
+                        #(Self::#pascal_names(message) => message.to_packet(key),)*
+                        Self::State(state) => #ext::Packet::new(
+                            key, 
+                            #ext::State::to_payload(state),
                         ),
-                    )),
-                }    
+                    }
+                }        
+
+                fn apply_to(&self, state: &mut #state_name #ty_generics) {
+                    match self {
+                        #(Self::#pascal_names(#names) => #names.apply_to(&mut state.#names),)*
+                        Self::State(new_state) => *state = new_state.clone(),
+                    }
+                }  
             } 
 
-            fn from_packet(
-                parent_key: #mp::Key,
-                depth: #mp::Depth,
-                packet: &#mp::Packet, 
-            ) -> core::result::Result<Self, #mp::PacketError> {
-                Ok(match packet.key().id() - parent_key.id() {
-                    0 => Ok(Self::State(
-                        packet.read_state()
-                    )),
-                    #(#node_index_starts_name::#upper_snake_names..#node_index_ends_name::#upper_snake_names => Ok(
-                        #message_name::#pascal_names(#message_tys::from_packet(
-                            parent_key + #node_index_starts_name::#upper_snake_names, 
-                            depth,
-                            packet, 
-                        )?)
-                    ),)*
-                    id_delta => Err(#mp::PacketError::new(
-                        packet.clone(),
-                        Some(id_delta),
-                        format!(
-                            "{}: unknown id_delta, depth: {:?}", 
-                            std::any::type_name::<Self>(), 
-                            depth,
-                        ),
-                    )),
-                }?)     
-            }
+            impl #impl_generics #ext::Emitter<#state_name #ty_generics> for Emitter #ty_generics {  
+                fn callback(&self) -> &#ext::Callback<Message #ty_generics> { &self.callback }
 
-            fn to_packet(
-                &self,
-                key: #mp::Key, 
-            ) -> core::result::Result<#mp::Packet, #mp::MessageError> {       
-                match self {
-                    #(Self::#pascal_names(message) => message.to_packet(key),)*
-                    Self::State(state) => Ok(#mp::Packet::new(key, state)),
+                fn new(
+                    callback: #ext::Callback<Message #ty_generics>,
+                ) -> Self {
+                    Self { 
+                        #(
+                            #names: #ext::Emitter::new(
+                                #ext::Callback::access(
+                                    callback.clone(), 
+                                    #id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE,
+                                    |_, message| Message::#pascal_names(message),
+                                ),
+                            ),
+                        )*
+                        callback, 
+                    }
                 }
             }
-        }
 
-        impl Default for #node_name { 
-            fn default() -> Self { Self::new(
-                #mp::Key::default(), 
-                #mp::IdDelta::default(), 
-                #mp::Depth::default(), 
-                None,
-            ) }
-        }
-
-        impl #mp::Accessor for #node_name  {
-            type State = #state_name;
-            type Message = #message_name;
-            type Node = #node_name;
-        }
-
-        impl #mp::Fallback for #node_name {
-            fn fallback(&self, message: Self::Message, delta: Option<f32>) {
-                match message {
-                    #(#message_name::#pascal_names(message) => self.#names.handle(message, delta),)*
-                    #message_name::State(_) => (),
-                } 
+            impl<CS: System, #impl_params> std::ops::Deref for Accesser<CS, #ty_params> {
+                type Target = #ext::RcAccess<#state_name #ty_generics, CS>;
+                fn deref(&self) -> &Self::Target { &self.access }
             }
-        }
         
-        impl #mp::Node<#state_name> for #node_name { 
-            fn key(&self) -> #mp::Key { self.key }
-            fn emitter(&self) -> Option<&#mp::Emitter> { self.emitter.as_ref() }
-
-            fn clone_state(&self) -> #state_name { 
-                #state_name {
-                    #(#names: self.#names.clone_state(),)*   
+            impl<CS: System, #impl_params> #ext::Accesser<#state_name #ty_generics, CS> for Accesser<CS, #ty_params> {
+                fn new(
+                    access: #ext::RcAccess<#state_name #ty_generics, CS>,
+                ) -> Self {
+                    Self { 
+                        #(#names: #ext::Accesser::new(
+                            #ext::RcAccess::access(
+                                access.clone(), 
+                                #id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE,
+                                |state, _| &state.#names,
+                            ),
+                        ),)*
+                        access, 
+                    }
                 }
             }
-        }
+
+            impl<'n, CS: #ext::System, #impl_params> std::ops::Deref for Node<'n, CS, #ty_params> {
+                type Target = #state_name #ty_generics;
+                fn deref(&self) -> &Self::Target { 
+                    (self.accesser.access)(self.consensus, *self.alt)
+                }
+            }
+
+            impl<'n, CS: #ext::System, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, CS, #ty_params> {
+                fn alt(&self) -> &#ext::Alt { self.alt }
+                fn emitter(&self) -> &Emitter #ty_generics { self.emitter }
+            }
+
+            impl<'n, CS: #ext::System, #impl_params> #ext::NewNode<'n, #state_name #ty_generics, CS> for Node<'n, CS, #ty_params> {
+                fn new(
+                    emitter: &'n Emitter #ty_generics,
+                    accesser: &'n Accesser<CS, #ty_params>,
+                    consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,
+                    alt: &'n #ext::Alt,     
+                ) -> Self {
+                    Self { 
+                        emitter, 
+                        accesser,
+                        #(#names: #ext::NewNode::new(
+                            &emitter.#names, 
+                            &accesser.#names, 
+                            consensus, 
+                            alt, 
+                        ),)*
+                        consensus, 
+                        alt,
+                    }
+                }
         
-        impl #mp::NewNode<#state_name> for #node_name { 
-            fn new(
-                mut key: #mp::Key,
-                id_delta: #mp::IdDelta,
-                depth: #mp::Depth,
-                emitter: Option<#mp::Emitter>,
-            ) -> Self {
-                key = key + id_delta;
-
-                Self { 
-                    key,   
-                    emitter: emitter.clone(),
-                    #(#names: #mp::NewNode::new(
-                        key, #node_index_starts_name::#upper_snake_names, depth, emitter.clone(),
-                    ),)*
+                fn new_alt(
+                    &self,
+                    alt: #ext::Alt,         
+                ) -> #ext::ConsensusRead<'n, #state_name #ty_generics, CS> {
+                    #ext::ConsensusRead::new(
+                        self.emitter, 
+                        self.accesser, 
+                        self.consensus.clone(), 
+                        alt,
+                    )
                 }
-            }
-        }
-        
-        impl #mp::Consensus<#state_name> for #node_name { 
-            fn new_from(
-                node: &Self,
-                emitter: Option<#mp::Emitter>,
-            ) -> Self {
-                Self {
-                    key: node.key,
-                    emitter: emitter.clone(),
-                    #(#names: #mp::Consensus::new_from(&node.#names, emitter.clone()),)*
-                }
-            }
-
-            fn set_emitter(&mut self, emitter: Option<#mp::Emitter>) { 
-                self.emitter = emitter.clone(); 
-                #(self.#names.set_emitter(emitter.clone());)*   
-            }
-
-            fn apply(&self, message: #message_name) {
-                match message {
-                    #(#message_name::#pascal_names(#names) => self.#names.apply(#names),)*
-                    #message_name::State(state) => {
-                        self.apply_state(state.clone());
-                        #(self.#names.emit(state.#names);)*                    
-                    },
-                } 
-            }
-
-            fn apply_state(&self, state: #state_name) {
-                #(self.#names.apply_state(state.#names);)*       
             }
         }
     })

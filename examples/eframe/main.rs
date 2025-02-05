@@ -1,85 +1,76 @@
-use bases::MessageError;
-use frand_node::*;
-use eframe::{egui::*, CreationContext, Frame, NativeOptions};
-use log::LevelFilter;
+use std::{sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use tokio::select;
+use eframe::{egui::*, Frame, NativeOptions};
+use frand_node::prelude::*;
 use model::Model;
-use view::View;
+use tokio::{spawn, time::sleep};
+use widget::title_frame::TitleFrame;
 
 mod model;
-mod view;
 mod widget;
 
-struct Ui {
-    view: View,
+#[derive(Debug, Default)]
+struct App {
+    model: Component<Model>,
 }
 
-impl Ui {
-    fn new(cc: &CreationContext) -> Self {
-        let mut model = Processor::<Model>::new(
-            MessageError::log_error,
-            System::handle,
-        );
-
-        let mut view = View::default();
-        view.stopwatch.set_subject(&model.stopwatch);
-        view.sums.set_subject(&model.sums);
-        view.selected_sum.set_selector(&model.sums, |sums, index| {
-            sums.values.active_item(index)           
-        });
-        
-        let mut view = Processor::<View>::new_with(
-            view,
-            MessageError::log_error,
-            System::handle,
-        );       
-
-        let view_node = view.node().clone();
-
-        let ctx = cc.egui_ctx.clone();
-        tokio::spawn(async move {
-            let mut model_output_rx = model.take_output_rx().unwrap();
-            let mut view_output_rx = view.take_output_rx().unwrap();
-
-            model.start(0.05).await;
-            view.start(0.05).await;
-            
-            loop {
-                select! {
-                    Some(_) = model_output_rx.recv() => {
-                        ctx.request_repaint();
-                    }
-                    Some(_) = view_output_rx.recv() => {
-                        ctx.request_repaint();                        
-                    }
-                    else => { break; }
-                }
-            }        
-        });
-        
-        Self { 
-            view: view_node, 
-        }
-    }
+#[derive(Debug)]
+struct Ui {
+    frame_total: usize,
+    output_total: Arc<AtomicUsize>,
+    model: Consensus<Model>,
 }
 
 impl eframe::App for Ui {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {    
         CentralPanel::default().show(ctx, |ui| {
-            self.view.ui(ui);
+            ui.title_frame("Ui", |ui| {
+                ui.label(format!("frame_total: {}", self.frame_total));
+                ui.label(format!("output_total: {}", self.output_total.load(Ordering::Relaxed)));
+            });
+
+            self.model.read().node().ui(ui);
+
+            self.frame_total += 1;
         });
     }
 }
 
 #[tokio::main]
-async fn main() -> eframe::Result<()> {
-    TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
-    .unwrap_or_else(|err| log::info!("{err}"));
+async fn main() -> eframe::Result<()> {    
+    TermLogger::init(log::LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto)
+    .unwrap_or_else(|err| log::error!("{err}"));
 
     eframe::run_native(
         "Examples",
         NativeOptions::default(),
-        Box::new(|cc| Ok(Box::new(Ui::new(cc)))),
+        Box::new(|cc| {
+            let ctx = cc.egui_ctx.clone();
+            let output_total = Arc::new(AtomicUsize::new(0));
+
+            let mut app = App::default();
+            let ui = Ui { 
+                frame_total: 0,
+                output_total: output_total.clone(),
+                model: app.model.clone(), 
+            };
+
+            spawn(
+                async move {
+                    loop {
+                        sleep(Duration::from_millis(50)).await;
+
+                        let output = app.model.update().await;
+
+                        if !output.is_empty() {
+                            output_total.fetch_add(output.len(), Ordering::Relaxed);
+                            ctx.request_repaint();
+                        }
+                    }
+                }
+            );
+
+            Ok(Box::new(ui))
+    }),
     )
 }
