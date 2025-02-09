@@ -15,7 +15,7 @@ pub struct Sum {
 impl System for Sum {
     fn handle<CS: System>(
         node: Self::Node<'_, CS>, 
-        message: &Self::Message, 
+        message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {        
         use sum::Message::*;

@@ -4,7 +4,7 @@ pub trait Fallback: State {
     #[allow(unused_variables)]
     fn fallback<CS: System>(
         node: Self::Node<'_, CS>, 
-        message: &Self::Message, 
+        message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {}
 }
@@ -12,7 +12,7 @@ pub trait Fallback: State {
 pub trait System: Fallback {
     fn handle<CS: System>(
         node: Self::Node<'_, CS>, 
-        message: &Self::Message, 
+        message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {
         match message {

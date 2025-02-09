@@ -117,7 +117,7 @@ impl<S: System> Component<S> {
 
                             S::handle(
                                 self.consensus.read_with(&self.process_emitter).node(), 
-                                message, 
+                                message.clone(), 
                                 delta,
                             );
         

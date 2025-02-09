@@ -12,7 +12,7 @@ pub struct Stopwatch {
 impl System for Stopwatch {
     fn handle<CS: System>(
         node: Self::Node<'_, CS>, 
-        message: &Self::Message, 
+        message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {        
         use stopwatch::Message::*;
@@ -28,7 +28,7 @@ impl System for Stopwatch {
 
             // enabled 에 true 가 emit 되었을 때
             // elapsed 를 emit 하여 elapsed 를 재시동
-            Enabled(enabled) if *enabled => {
+            Enabled(enabled) if enabled => {
                 node.elapsed.emit(*node.elapsed);
             },
 

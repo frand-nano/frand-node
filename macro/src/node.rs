@@ -166,12 +166,14 @@ pub fn expand(
             impl #impl_generics #ext::Fallback for #state_name #ty_generics {
                 fn fallback<CS: #ext::System>(
                     node: Node<'_, CS, #ty_params>, 
-                    message: &Message #ty_generics, 
+                    message: Message #ty_generics, 
                     delta: Option<std::time::Duration>,
                 ) {
                     match message {
                         #(Message::#pascal_names(message) => <#tys>::handle(node.#names, message, delta),)*
-                        Message::State(_) => (),
+                        Message::State(state) => {
+                            #(<#tys>::handle(node.#names, state.#names.into_message(), delta);)*
+                        },
                     } 
                 }
             }

@@ -70,7 +70,7 @@ pub mod vec {
     impl<I: System> super::Fallback for Vec<I> {
         fn fallback<CS: super::System>(
             node: Node<'_, CS, I>,
-            message: &Message<I>,
+            message: Message<I>,
             delta: Option<std::time::Duration>,
         ) {
             match message {
@@ -78,7 +78,7 @@ pub mod vec {
                 Message::Pop => (),
                 Message::Len(_) => (),
                 Message::Item(index, message) => {
-                    let item = node.item(*index);
+                    let item = node.item(index);
                     <I>::handle(
                         item.node(),
                         message, 

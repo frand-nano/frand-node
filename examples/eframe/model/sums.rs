@@ -15,7 +15,7 @@ pub struct Sums {
 impl System for Sums {
     fn handle<CS: System>(
         node: Self::Node<'_, CS>, 
-        message: &Self::Message, 
+        message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {        
         use sums::Message::*;
@@ -30,7 +30,7 @@ impl System for Sums {
             // values 의 index 번째 item 에 sum 이 emit 되었을 때
             // sums 의 index 번째 item 에 sum 을 emit
             Values(Item(index, Sum(sum))) => {
-                node.sums.item(*index).emit(*sum)
+                node.sums.item(index).emit(sum)
             },            
 
             // sums 에 emit 되었을 때
