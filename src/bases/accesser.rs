@@ -10,7 +10,7 @@ pub trait Accesser<S: State, CS: System>: Debug + Clone + Send + Sync + Deref<Ta
 #[derive(Clone)]
 pub struct RcAccess<S: State, CS: System> {
     consist: Consist,
-    access: Arc<dyn Fn(&CS, Alt) -> &S + Send + Sync>,
+    access: Arc<dyn Fn(&CS, Transient) -> &S + Send + Sync>,
 }
 
 impl<S: State + Debug, CS: System + Debug> Debug for RcAccess<S, CS> {
@@ -23,14 +23,14 @@ impl<S: State + Debug, CS: System + Debug> Debug for RcAccess<S, CS> {
 }
 
 impl<S: State, CS: System> Deref for RcAccess<S, CS> {
-    type Target = Arc<dyn Fn(&CS, Alt) -> &S + Send + Sync>;
+    type Target = Arc<dyn Fn(&CS, Transient) -> &S + Send + Sync>;
     fn deref(&self) -> &Self::Target { &self.access }
 }
 
 impl<S: State, CS: System> RcAccess<S, CS> {
     pub fn new(
         consist: Consist,
-        access: Arc<dyn Fn(&CS, Alt) -> &S + Send + Sync>,
+        access: Arc<dyn Fn(&CS, Transient) -> &S + Send + Sync>,
     ) -> Self {
         Self { 
             consist, 
@@ -47,9 +47,9 @@ impl<S: State, CS: System> RcAccess<S, CS> {
         Self { 
             consist: parent.consist.access(id_delta, alt_size), 
             access: Arc::new(
-                move |consensus, alt| access(
-                    parent(consensus, alt), 
-                    alt.index(parent.consist.alt_depth()),
+                move |consensus, transient| access(
+                    parent(consensus, transient), 
+                    transient.index(parent.consist.alt_depth()),
                 )
             ), 
         }     

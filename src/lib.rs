@@ -27,7 +27,7 @@ pub mod ext {
     pub use crate::{
         prelude::*,
         bases::{
-            packet::{IdDelta, IdSize, AltIndex, AltSize, Key, Consist, Id, AltDepth, Alt, Payload, Packet, MessagePacket},
+            packet::{IdDelta, IdSize, AltIndex, AltSize, Key, Consist, Id, AltDepth, Transient, Payload, Packet, MessagePacket},
             callback::Callback,
             emitter::Emitter,
             accesser::{Accesser, RcAccess},

@@ -51,11 +51,11 @@ impl<M: 'static> Callback<M> {
 
     pub fn emit(
         &self, 
-        alt: &Alt, 
+        transient: &Transient, 
         message: M,
     ) {
         self(MessagePacket::Message(
-            Key::new(self.consist, *alt), 
+            Key::new(self.consist, *transient), 
             None, 
             message,
         ));
@@ -63,11 +63,11 @@ impl<M: 'static> Callback<M> {
 
     pub fn emit_carry(
         &self, 
-        alt: &Alt, 
+        transient: &Transient, 
         message: M,
     ) {
         self(MessagePacket::Carry(
-            Key::new(self.consist, *alt), 
+            Key::new(self.consist, *transient), 
             Instant::now(), 
             message
         ));
@@ -75,11 +75,11 @@ impl<M: 'static> Callback<M> {
 
     pub fn emit_future<F>(
         &self, 
-        alt: &Alt, 
+        transient: &Transient, 
         future: F,
     ) where F: Future<Output = M> + 'static + Send + Sync {
         self(MessagePacket::new_future(
-            Key::new(self.consist, *alt), 
+            Key::new(self.consist, *transient), 
             future
         ));
     }

@@ -6,7 +6,7 @@ pub struct ConsensusRead<'n, S: State, CS: System> {
     emitter: &'n S::Emitter,
     accesser: &'n S::Accesser<CS>,
     consensus: Arc<RwLockReadGuard<'n, CS>>,
-    alt: Alt,
+    transient: Transient,
 }
 
 impl<'n, S: State, CS: System> ConsensusRead<'n, S, CS> {
@@ -14,13 +14,13 @@ impl<'n, S: State, CS: System> ConsensusRead<'n, S, CS> {
         emitter: &'n S::Emitter,
         accesser: &'n S::Accesser<CS>,
         consensus: Arc<RwLockReadGuard<'n, CS>>,
-        alt: Alt,
+        transient: Transient,
     ) -> Self {     
         Self { 
             emitter, 
             accesser, 
             consensus, 
-            alt, 
+            transient, 
         }
     }
 
@@ -30,7 +30,7 @@ impl<'n, S: State, CS: System> ConsensusRead<'n, S, CS> {
             self.emitter,
             self.accesser,
             &self.consensus,
-            &self.alt,
+            &self.transient,
         )
     }
 }
@@ -38,11 +38,11 @@ impl<'n, S: State, CS: System> ConsensusRead<'n, S, CS> {
 impl<'n, S: System, CS: System> Deref for ConsensusRead<'n, S, CS> {
     type Target = S;
     fn deref(&self) -> &Self::Target { 
-        (self.accesser)(&self.consensus, self.alt)
+        (self.accesser)(&self.consensus, self.transient)
     }
 }
 
 impl<'n, S: System, CS: System> Node<'n, S> for ConsensusRead<'n, S, CS> {
-    fn alt(&self) -> &Alt { &self.alt }
+    fn transient(&self) -> &Transient { &self.transient }
     fn emitter(&self) -> &<S as State>::Emitter { &self.emitter }
 }

@@ -21,7 +21,7 @@ pub mod terminal {
         emitter: &'n S::Emitter,
         accesser: &'n S::Accesser<CS>,
         consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
-        alt: &'n Alt,      
+        transient: &'n Transient,      
     }
     
     impl<S: System> super::Emitter<S> for Emitter<S> 
@@ -56,13 +56,13 @@ pub mod terminal {
     where S: System<Accesser<CS> = Accesser<S, CS>> {
         type Target = S;
         fn deref(&self) -> &Self::Target { 
-            (self.accesser.access)(self.consensus, *self.alt)
+            (self.accesser.access)(self.consensus, *self.transient)
         }
     }
     
     impl<'n, S: System, CS: System> super::Node<'n, S> for Node<'n, S, CS> 
     where S: System<Accesser<CS> = Accesser<S, CS>> {
-        fn alt(&self) -> &Alt { self.alt }
+        fn transient(&self) -> &Transient { self.transient }
         fn emitter(&self) -> &S::Emitter { &self.emitter }
     }
     
@@ -71,25 +71,25 @@ pub mod terminal {
             emitter: &'n S::Emitter,
             accesser: &'n S::Accesser<CS>,
             consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
-            alt: &'n Alt,        
+            transient: &'n Transient,        
         ) -> Self {
             Self { 
                 emitter,
                 accesser,
                 consensus,
-                alt,
+                transient,
             }
         }
         
-        fn new_alt(
+        fn alt(
             &self,
-            alt: Alt,           
+            transient: Transient,           
         ) -> ConsensusRead<'n, S, CS> {
             ConsensusRead::new(
                 self.emitter, 
                 self.accesser, 
                 self.consensus.clone(), 
-                alt,
+                transient,
             )
         }
     }
@@ -160,7 +160,14 @@ macro_rules! impl_terminal_for {
         $(
             impl_terminal_state_for!{ $tys }
             impl_terminal_message_for!{ $tys }
-            impl frand_node::ext::Fallback for $tys { }
+            impl frand_node::ext::Fallback for $tys { 
+                #[allow(unused_variables)]
+                fn fallback<CS: frand_node::ext::System>(
+                    node: Self::Node<'_, CS>, 
+                    message: Self::Message, 
+                    delta: Option<std::time::Duration>,
+                ) {}
+            }
             impl frand_node::ext::System for $tys { }
         )*      
     };

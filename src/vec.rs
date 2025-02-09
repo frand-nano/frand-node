@@ -63,7 +63,7 @@ pub mod vec {
         emitter: &'n Emitter<I>,
         accesser: &'n Accesser<CS, I>,
         consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
-        alt: &'n super::Alt,
+        transient: &'n super::Transient,
         pub item: <I as super::State>::Node<'n, CS>,
     }
 
@@ -118,21 +118,21 @@ pub mod vec {
                                 parent_key
                                     .consist()
                                     .access(LEN_ID_DELTA, <Vec<I>>::NODE_ALT_SIZE),
-                                parent_key.alt(),
+                                parent_key.transient(),
                             ),
                             depth + 1,
                         )?,
                     )),
                     ITEM_ID_DELTA.. => {
                         Ok(Message::Item(
-                            packet.key().alt().index(parent_key.consist().alt_depth()),
+                            packet.key().transient().index(parent_key.consist().alt_depth()),
                             <I as super::State>::Message::from_packet(
                                 packet,
                                 super::Key::new(
                                     parent_key
                                         .consist()
                                         .access(ITEM_ID_DELTA, <Vec<I>>::NODE_ALT_SIZE),
-                                    parent_key.alt(),
+                                    parent_key.transient(),
                                 ),
                                 depth + 1,
                             )?
@@ -150,7 +150,7 @@ pub mod vec {
                 Self::Item(index, message) => message.to_packet(
                     Key::new(
                         key.consist(),
-                        key.alt().alt(key.consist().alt_depth(), *index),
+                        key.transient().alt(key.consist().alt_depth(), *index),
                     )
                 ),
                 Self::State(state) => super::Packet::new(key, super::State::to_payload(state)),
@@ -227,13 +227,13 @@ pub mod vec {
         type Target = Vec<I>;
 
         fn deref(&self) -> &Self::Target {
-            (self.accesser.access)(self.consensus, *self.alt)
+            (self.accesser.access)(self.consensus, *self.transient)
         }
     }
 
     impl<'n, CS: super::System, I: System> super::Node<'n, Vec<I>> for Node<'n, CS, I> {
-        fn alt(&self) -> &super::Alt {
-            self.alt
+        fn transient(&self) -> &super::Transient {
+            self.transient
         }
 
         fn emitter(&self) -> &Emitter<I> {
@@ -246,37 +246,37 @@ pub mod vec {
             emitter: &'n Emitter<I>,
             accesser: &'n Accesser<CS, I>,
             consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
-            alt: &'n super::Alt,
+            transient: &'n super::Transient,
         ) -> Self {
             Self {
                 emitter,
                 accesser,
-                item: super::NewNode::new(&emitter.item, &accesser.item, consensus, alt),
+                item: super::NewNode::new(&emitter.item, &accesser.item, consensus, transient),
                 consensus,
-                alt,
+                transient,
             }
         }
         
-        fn new_alt(
+        fn alt(
             &self,
-            alt: Alt,             
+            transient: Transient,             
         ) -> ConsensusRead<'n, Vec<I>, CS> {
             ConsensusRead::new(
                 self.emitter, 
                 self.accesser, 
                 self.consensus.clone(), 
-                alt,
+                transient,
             )
         }
     }
 
     impl<'n, CS: super::System, I: System> Node<'n, CS, I> {
         pub fn emit_push(&self, item: I) {
-            self.emitter.push.emit(self.alt, item);
+            self.emitter.push.emit(self.transient, item);
         }
 
         pub fn emit_pop(&self) {
-            self.emitter.pop.emit(self.alt, ());            
+            self.emitter.pop.emit(self.transient, ());            
         }
 
         pub fn items(&self) -> std::vec::IntoIter<ConsensusRead<'_, I, CS>> {
@@ -292,8 +292,8 @@ pub mod vec {
         pub fn item(&self, index: AltIndex) -> ConsensusRead<'_, I, CS> {
             use crate::ext::Node;
 
-            self.item.new_alt(
-                (*self.alt()).alt(
+            self.item.alt(
+                (*self.transient()).alt(
                     self.consist().alt_depth(), 
                     index,
                 )

@@ -1,12 +1,11 @@
 use crate::ext::*;
 
 pub trait Fallback: State {
-    #[allow(unused_variables)]
     fn fallback<CS: System>(
         node: Self::Node<'_, CS>, 
         message: Self::Message, 
         delta: Option<std::time::Duration>,
-    ) {}
+    );
 }
 
 pub trait System: Fallback {

@@ -8,16 +8,16 @@ pub trait Emitter<S: State>: Debug + Clone + Send + Sync {
         callback: Callback<S::Message>,
     ) -> Self;
     
-    fn emit(&self, alt: &Alt, state: S) {
-        self.callback().emit(alt, state.into_message());
+    fn emit(&self, transient: &Transient, state: S) {
+        self.callback().emit(transient, state.into_message());
     }
 
-    fn emit_carry(&self, alt: &Alt, state: S) {
-        self.callback().emit_carry(alt, state.into_message());
+    fn emit_carry(&self, transient: &Transient, state: S) {
+        self.callback().emit_carry(transient, state.into_message());
     }
 
-    fn emit_future<F>(&self, alt: &Alt, future: F) 
+    fn emit_future<F>(&self, transient: &Transient, future: F) 
     where F: Future<Output = S::Message> + 'static + Send + Sync {
-        self.callback().emit_future(alt, future);
+        self.callback().emit_future(transient, future);
     }
 }

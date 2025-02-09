@@ -159,7 +159,7 @@ pub fn expand(
                 emitter: &'n Emitter #ty_generics,
                 accesser: &'n Accesser<CS, #ty_params>,
                 consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,                
-                alt: &'n #ext::Alt,      
+                transient: &'n #ext::Transient,      
                 #(#viss #names: <#tys as #ext::State>::Node<'n, CS>,)*
             }
         
@@ -195,7 +195,7 @@ pub fn expand(
                                 packet, 
                                 #ext::Key::new(
                                     parent_key.consist().access(#id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE),
-                                    parent_key.alt(),
+                                    parent_key.transient(),
                                 ), 
                                 depth + 1,
                             )?)
@@ -279,12 +279,12 @@ pub fn expand(
             impl<'n, CS: #ext::System, #impl_params> std::ops::Deref for Node<'n, CS, #ty_params> {
                 type Target = #state_name #ty_generics;
                 fn deref(&self) -> &Self::Target { 
-                    (self.accesser.access)(self.consensus, *self.alt)
+                    (self.accesser.access)(self.consensus, *self.transient)
                 }
             }
 
             impl<'n, CS: #ext::System, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, CS, #ty_params> {
-                fn alt(&self) -> &#ext::Alt { self.alt }
+                fn transient(&self) -> &#ext::Transient { self.transient }
                 fn emitter(&self) -> &Emitter #ty_generics { self.emitter }
             }
 
@@ -293,7 +293,7 @@ pub fn expand(
                     emitter: &'n Emitter #ty_generics,
                     accesser: &'n Accesser<CS, #ty_params>,
                     consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,
-                    alt: &'n #ext::Alt,     
+                    transient: &'n #ext::Transient,     
                 ) -> Self {
                     Self { 
                         emitter, 
@@ -302,22 +302,22 @@ pub fn expand(
                             &emitter.#names, 
                             &accesser.#names, 
                             consensus, 
-                            alt, 
+                            transient, 
                         ),)*
                         consensus, 
-                        alt,
+                        transient,
                     }
                 }
         
-                fn new_alt(
+                fn alt(
                     &self,
-                    alt: #ext::Alt,         
+                    transient: #ext::Transient,         
                 ) -> #ext::ConsensusRead<'n, #state_name #ty_generics, CS> {
                     #ext::ConsensusRead::new(
                         self.emitter, 
                         self.accesser, 
                         self.consensus.clone(), 
-                        alt,
+                        transient,
                     )
                 }
             }

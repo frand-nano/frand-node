@@ -10,7 +10,7 @@ pub type IdDelta = u32;
 pub type IdSize = u32;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Key(Consist, Alt);
+pub struct Key(Consist, Transient);
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Consist(Id, AltDepth);
@@ -22,7 +22,7 @@ pub struct Id(u32);
 pub struct AltDepth(u32);
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Alt([AltIndex; ALT_DEPTH_SIZE]);
+pub struct Transient([AltIndex; ALT_DEPTH_SIZE]);
 
 #[derive(Default, Debug, Clone)]
 pub struct Payload(Option<Box<[u8]>>);
@@ -89,18 +89,18 @@ impl<M: 'static> MessagePacket<M> {
                 MessagePacket::Message(
                     key, 
                     instant, 
-                    wrap(key.alt().index(alt_depth), message),
+                    wrap(key.transient().index(alt_depth), message),
                 )
             },
             Self::Carry(key, instant, message) => {
                 MessagePacket::Carry(
                     key, 
                     instant, 
-                    wrap(key.alt().index(alt_depth), message),
+                    wrap(key.transient().index(alt_depth), message),
                 )
             },
             Self::Future(key, instant, future) => {
-                let index = key.alt().index(alt_depth);
+                let index = key.transient().index(alt_depth);
                 MessagePacket::Future(
                     key, 
                     instant, 
@@ -115,13 +115,13 @@ impl<M: 'static> MessagePacket<M> {
 
 impl Key {
     pub fn consist(&self) -> Consist { self.0 }
-    pub fn alt(&self) -> Alt { self.1 }
+    pub fn transient(&self) -> Transient { self.1 }
 
     pub fn new(
         consist: Consist, 
-        alt: Alt,
+        transient: Transient,
     ) -> Self {
-        Self(consist, alt)
+        Self(consist, transient)
     }
 }
 
@@ -147,7 +147,7 @@ impl Consist {
     }
 }
 
-impl Alt {
+impl Transient {
     pub fn index(&self, alt_depth: AltDepth) -> AltIndex { 
         self.0[alt_depth.0 as usize]
     }

@@ -28,7 +28,7 @@ impl<CS: System> Consensus<CS> {
             &self.emitter,
             &self.accesser,
             Arc::new(self.state.as_ref().read().unwrap()),
-            Alt::default(), 
+            Transient::default(), 
         )
     }
 
@@ -37,7 +37,7 @@ impl<CS: System> Consensus<CS> {
             emitter,
             &self.accesser,
             Arc::new(self.state.as_ref().read().unwrap()),
-            Alt::default(), 
+            Transient::default(), 
         )
     }
 
