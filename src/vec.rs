@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLockReadGuard};
+use std::vec::IntoIter;
 use crate::ext::*;
 
 impl<I: System> State for Vec<I> {
@@ -7,8 +7,8 @@ impl<I: System> State for Vec<I> {
 
     type Message = vec::Message<I>;
     type Emitter = vec::Emitter<I>;
-    type Accesser<CS: System> = vec::Accesser<CS, I>;
-    type Node<'n, CS: System> = vec::Node<'n, CS, I>;
+    type Accesser = vec::Accesser<I>;
+    type Node<'n> = vec::Node<'n, I>;
 
     fn from_payload(payload: &Payload) -> Self {
         Payload::to_state(payload)
@@ -53,23 +53,23 @@ pub mod vec {
     }
 
     #[derive(Debug, Clone)]
-    pub struct Accesser<CS: super::System, I: System> {
-        access: super::RcAccess<Vec<I>, CS>,
-        pub item: <I as super::State>::Accesser<CS>,
+    pub struct Accesser<I: System> {
+        lookup: super::Lookup<Vec<I>>,
+        lookup_len: super::Lookup<usize>,
+        pub item: <I as super::State>::Accesser,
     }
 
-    #[derive(Debug)]
-    pub struct Node<'n, CS: super::System, I: System> {
+    #[derive(Debug, Clone)]
+    pub struct Node<'n, I: System> {  
+        accesser: &'n Accesser<I>,
         emitter: &'n Emitter<I>,
-        accesser: &'n Accesser<CS, I>,
-        consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
         transient: &'n super::Transient,
-        pub item: <I as super::State>::Node<'n, CS>,
+        pub item: <I as super::State>::Node<'n>,
     }
 
     impl<I: System> super::Fallback for Vec<I> {
-        fn fallback<CS: super::System>(
-            node: Node<'_, CS, I>,
+        fn fallback(
+            node: Node<'_, I>,
             message: Message<I>,
             delta: Option<std::time::Duration>,
         ) {
@@ -78,12 +78,11 @@ pub mod vec {
                 Message::Pop => (),
                 Message::Len(_) => (),
                 Message::Item(index, message) => {
-                    let item = node.item(index);
-                    <I>::handle(
-                        item.node(),
+                    I::handle(
+                        node.item(index).node(),
                         message, 
                         delta,
-                    )
+                    )          
                 },
                 Message::State(_) => (),
             }
@@ -147,12 +146,7 @@ pub mod vec {
                 Self::Push(item) => super::Packet::new(key, super::State::to_payload(item)),
                 Self::Pop => super::Packet::new(key, super::State::to_payload(&())),
                 Self::Len(message) => message.to_packet(key),
-                Self::Item(index, message) => message.to_packet(
-                    Key::new(
-                        key.consist(),
-                        key.transient().alt(key.consist().alt_depth(), *index),
-                    )
-                ),
+                Self::Item(index, message) => message.to_packet(key.alt(*index)),
                 Self::State(state) => super::Packet::new(key, super::State::to_payload(state)),
             }
         }
@@ -178,25 +172,21 @@ pub mod vec {
                 push: super::Callback::<I>::access(
                     callback.clone(),
                     PUSH_ID_DELTA,
-                    <Vec<I>>::NODE_ALT_SIZE,
                     |_, item| Message::Push(item),
                 ),
                 pop: super::Callback::access(
                     callback.clone(),
                     POP_ID_DELTA,
-                    <Vec<I>>::NODE_ALT_SIZE,
                     |_, _| Message::Pop,
                 ),
                 len: super::Callback::access(
                     callback.clone(),
                     LEN_ID_DELTA,
-                    <Vec<I>>::NODE_ALT_SIZE,
                     |_, message| Message::Len(message),
                 ),
                 item: super::Emitter::new(super::Callback::access(
                     callback.clone(),
                     ITEM_ID_DELTA,
-                    <Vec<I>>::NODE_ALT_SIZE,
                     |index, message| Message::Item(index, message),
                 )),
                 callback,
@@ -204,73 +194,49 @@ pub mod vec {
         }
     }
 
-    impl<CS: System, I: System> std::ops::Deref for Accesser<CS, I> {
-        type Target = RcAccess<Vec<I>, CS>;
-        fn deref(&self) -> &Self::Target { &self.access }
-    }
+    impl<I: System> super::Accesser<Vec<I>> for Accesser<I> {
+        fn lookup(&self) -> &Lookup<Vec<I>> {
+            &self.lookup
+        }
 
-    impl<CS: System, I: System> super::Accesser<Vec<I>, CS> for Accesser<CS, I> {
-        fn new(access: super::RcAccess<Vec<I>, CS>) -> Self {
-            Self {
-                item: super::Accesser::new(super::RcAccess::access(
-                    access.clone(),
-                    ITEM_ID_DELTA,
-                    <Vec<I>>::NODE_ALT_SIZE,
-                    |state, index| &state[index as usize],
+        fn new<CS: System>(builder: LookupBuilder<CS, Vec<I>>) -> Self {
+            Self { 
+                item: super::Accesser::new(builder.access(
+                    |state, index| state.map(|state| state.get(index as usize)).flatten(), 
+                    ITEM_ID_DELTA
                 )),
-                access,
+                lookup: builder.clone().build(|state| state.cloned()), 
+                lookup_len: builder.build(|state| state.map(|state| state.len())), 
             }
         }
     }
 
-    impl<'n, CS: super::System, I: System> std::ops::Deref for Node<'n, CS, I> {
-        type Target = Vec<I>;
-
-        fn deref(&self) -> &Self::Target {
-            (self.accesser.access)(self.consensus, *self.transient)
-        }
-    }
-
-    impl<'n, CS: super::System, I: System> super::Node<'n, Vec<I>> for Node<'n, CS, I> {
-        fn transient(&self) -> &super::Transient {
-            self.transient
-        }
-
-        fn emitter(&self) -> &Emitter<I> {
-            self.emitter
-        }
+    impl<'n, I: System> super::Node<'n, Vec<I>> for Node<'n, I> {
+        fn accesser(&self) -> &Accesser<I> { self.accesser }
+        fn emitter(&self) -> &Emitter<I> { self.emitter }
+        fn transient(&self) -> &super::Transient { &self.transient }
     }
     
-    impl<'n, CS: super::System, I: System> super::NewNode<'n, Vec<I>, CS> for Node<'n, CS, I> {
+    impl<'n, I: System> super::NewNode<'n, Vec<I>> for Node<'n, I> {
         fn new(
+            accesser: &'n Accesser<I>,
             emitter: &'n Emitter<I>,
-            accesser: &'n Accesser<CS, I>,
-            consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
             transient: &'n super::Transient,
         ) -> Self {
             Self {
-                emitter,
                 accesser,
-                item: super::NewNode::new(&emitter.item, &accesser.item, consensus, transient),
-                consensus,
+                emitter,
                 transient,
+                item: super::NewNode::new(
+                    &accesser.item, 
+                    &emitter.item, 
+                    transient,
+                ),
             }
-        }
-        
-        fn alt(
-            &self,
-            transient: Transient,             
-        ) -> ConsensusRead<'n, Vec<I>, CS> {
-            ConsensusRead::new(
-                self.emitter, 
-                self.accesser, 
-                self.consensus.clone(), 
-                transient,
-            )
         }
     }
 
-    impl<'n, CS: super::System, I: System> Node<'n, CS, I> {
+    impl<'n, I: System> Node<'n, I> {
         pub fn emit_push(&self, item: I) {
             self.emitter.push.emit(self.transient, item);
         }
@@ -279,25 +245,23 @@ pub mod vec {
             self.emitter.pop.emit(self.transient, ());            
         }
 
-        pub fn items(&self) -> std::vec::IntoIter<ConsensusRead<'_, I, CS>> {
+        pub fn items(&self) -> IntoIter<NodeAlt<'_, I>> {
             let mut result = Vec::new();
 
             for index in 0..self.len() {
                 result.push(self.item(index as u32))
-            }
+            }                   
 
-            result.into_iter()
+            result.into_iter()   
+        }     
+
+        pub fn len(&self) -> usize {
+            (self.accesser.lookup_len)(self.transient).unwrap_or_default()
         }
 
-        pub fn item(&self, index: AltIndex) -> ConsensusRead<'_, I, CS> {
+        pub fn item(&self, index: AltIndex) -> NodeAlt<'_, I> {
             use crate::ext::Node;
-
-            self.item.alt(
-                (*self.transient()).alt(
-                    self.consist().alt_depth(), 
-                    index,
-                )
-            )
+            self.item.alt(self.consist(), index)
         }
     }
 }

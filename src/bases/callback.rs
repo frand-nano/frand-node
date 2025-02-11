@@ -34,14 +34,13 @@ impl<M: 'static> Callback<M> {
         }
     }
 
-    pub fn access<P: 'static>(
+    pub fn access<P: Message>(
         callback: Callback<P>,
         id_delta: IdDelta,
-        alt_size: AltSize,
         wrap: fn(AltIndex, M) -> P,
     ) -> Self {   
         Self { 
-            consist: callback.consist.access(id_delta, alt_size), 
+            consist: callback.consist.access(id_delta, P::State::NODE_ALT_SIZE), 
             callback: Arc::new(move |packet| callback(packet.wrap(
                 callback.consist.alt_depth(), 
                 wrap,

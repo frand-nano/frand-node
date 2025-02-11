@@ -8,8 +8,8 @@ pub trait State: 'static + Debug + Default + Clone + Send + Sync + Unpin + Seria
 
     type Message: Message<State = Self>;
     type Emitter: Emitter<Self>;
-    type Accesser<CS: System>: Accesser<Self, CS>;
-    type Node<'n, CS: System>: Node<'n, Self> + NewNode<'n, Self, CS>;
+    type Accesser: Accesser<Self>;
+    type Node<'n>: Node<'n, Self> + NewNode<'n, Self>;
 
     fn from_payload(payload: &Payload) -> Self;    
     fn to_payload(&self) -> Payload;

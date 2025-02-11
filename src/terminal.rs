@@ -1,5 +1,3 @@
-use std::ops::Deref;
-use std::sync::{Arc, RwLockReadGuard};
 use crate::ext::*;
 use crate::frand_node;
 
@@ -12,15 +10,14 @@ pub mod terminal {
     }
 
     #[derive(Debug, Clone)]
-    pub struct Accesser<S: System, CS: System> {
-        access: RcAccess<S, CS>,
+    pub struct Accesser<S: System> {
+        lookup: Lookup<S>,
     }
     
-    #[derive(Debug)]
-    pub struct Node<'n, S: System, CS: System> {
+    #[derive(Debug, Clone)]
+    pub struct Node<'n, S: System> {
+        accesser: &'n S::Accesser,
         emitter: &'n S::Emitter,
-        accesser: &'n S::Accesser<CS>,
-        consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
         transient: &'n Transient,      
     }
     
@@ -36,61 +33,36 @@ pub mod terminal {
             }
         }
     }
-
-    impl<S: System, CS: System> Deref for Accesser<S, CS> {
-        type Target = RcAccess<S, CS>;
-        fn deref(&self) -> &Self::Target { &self.access }
-    }
         
-    impl<S: System, CS: System> super::Accesser<S, CS> for Accesser<S, CS> {
-        fn new(
-            access: RcAccess<S, CS>,
-        ) -> Self {
+    impl<S: System> super::Accesser<S> for Accesser<S> {
+        fn lookup(&self) -> &Lookup<S> {
+            &self.lookup
+        }
+
+        fn new<CS: System>(builder: LookupBuilder<CS, S>) -> Self {
             Self { 
-                access, 
+                lookup: builder.build(|state| state.cloned()), 
             }
         }
     }
-
-    impl<'n, S: System, CS: System> Deref for Node<'n, S, CS> 
-    where S: System<Accesser<CS> = Accesser<S, CS>> {
-        type Target = S;
-        fn deref(&self) -> &Self::Target { 
-            (self.accesser.access)(self.consensus, *self.transient)
-        }
+    
+    impl<'n, S: System> super::Node<'n, S> for Node<'n, S> {
+        fn accesser(&self) -> &S::Accesser { self.accesser }
+        fn emitter(&self) -> &S::Emitter { self.emitter }
+        fn transient(&self) -> &Transient { &self.transient }
     }
     
-    impl<'n, S: System, CS: System> super::Node<'n, S> for Node<'n, S, CS> 
-    where S: System<Accesser<CS> = Accesser<S, CS>> {
-        fn transient(&self) -> &Transient { self.transient }
-        fn emitter(&self) -> &S::Emitter { &self.emitter }
-    }
-    
-    impl<'n, S: System, CS: System> NewNode<'n, S, CS> for Node<'n, S, CS> {
+    impl<'n, S: System> NewNode<'n, S> for Node<'n, S> {
         fn new(
+            accesser: &'n S::Accesser,
             emitter: &'n S::Emitter,
-            accesser: &'n S::Accesser<CS>,
-            consensus: &'n Arc<RwLockReadGuard<'n, CS>>,
             transient: &'n Transient,        
         ) -> Self {
             Self { 
-                emitter,
                 accesser,
-                consensus,
+                emitter,
                 transient,
             }
-        }
-        
-        fn alt(
-            &self,
-            transient: Transient,           
-        ) -> ConsensusRead<'n, S, CS> {
-            ConsensusRead::new(
-                self.emitter, 
-                self.accesser, 
-                self.consensus.clone(), 
-                transient,
-            )
         }
     }
 }
@@ -105,8 +77,8 @@ macro_rules! impl_terminal_state_for {
 
                 type Message = Self;
                 type Emitter = frand_node::ext::terminal::Emitter<Self>;
-                type Accesser<CS: frand_node::ext::System> = frand_node::ext::terminal::Accesser<Self, CS>;
-                type Node<'n, CS: frand_node::ext::System> = frand_node::ext::terminal::Node<'n, Self, CS>;
+                type Accesser = frand_node::ext::terminal::Accesser<Self>;
+                type Node<'n> = frand_node::ext::terminal::Node<'n, Self>;
 
                 fn from_payload(payload: &frand_node::ext::Payload) -> Self {
                     payload.to_state()
@@ -162,8 +134,8 @@ macro_rules! impl_terminal_for {
             impl_terminal_message_for!{ $tys }
             impl frand_node::ext::Fallback for $tys { 
                 #[allow(unused_variables)]
-                fn fallback<CS: frand_node::ext::System>(
-                    node: Self::Node<'_, CS>, 
+                fn fallback(
+                    node: Self::Node<'_>, 
                     message: Self::Message, 
                     delta: Option<std::time::Duration>,
                 ) {}

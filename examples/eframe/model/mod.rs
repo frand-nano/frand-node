@@ -20,7 +20,7 @@ pub struct Model {
 
 impl System for Model {}
 
-impl<CS: System> Widget for model::Node<'_, CS> {
+impl Widget for model::Node<'_> {
     fn ui(self, ui: &mut Ui) -> Response {   
         ui.vertical(|ui| {
             ui.title_frame("Stopwatch", |ui| {

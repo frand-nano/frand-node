@@ -29,7 +29,7 @@ impl eframe::App for Ui {
                 ui.label(format!("output_total: {}", self.output_total.load(Ordering::Relaxed)));
             });
 
-            self.model.read().node().ui(ui);
+            self.model.node().ui(ui);
 
             self.frame_total += 1;
         });

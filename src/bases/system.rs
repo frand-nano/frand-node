@@ -1,16 +1,16 @@
 use crate::ext::*;
 
 pub trait Fallback: State {
-    fn fallback<CS: System>(
-        node: Self::Node<'_, CS>, 
+    fn fallback(
+        node: Self::Node<'_>, 
         message: Self::Message, 
         delta: Option<std::time::Duration>,
     );
 }
 
 pub trait System: Fallback {
-    fn handle<CS: System>(
-        node: Self::Node<'_, CS>, 
+    fn handle(
+        node: Self::Node<'_>, 
         message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {

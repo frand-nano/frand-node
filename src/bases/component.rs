@@ -29,10 +29,7 @@ impl<S: System> Deref for Component<S> {
 }
 
 impl<S: System> Component<S> {
-    pub fn consensus(&self) -> &Consensus<S> 
-    where Consensus<S>: Send + Sync { &self.consensus }
-
-    pub fn read<'c: 'n, 'n>(&'c self) -> ConsensusRead<'n, S, S> { self.consensus.read() }
+    pub fn consensus(&self) -> &Consensus<S> { &self.consensus }
 
     pub fn new(state: S) -> Self {
         let (input_tx, input_rx) = unbounded_channel();
@@ -50,7 +47,7 @@ impl<S: System> Component<S> {
             ),
         );
 
-        consensus.read().node().emit(state);
+        consensus.node().emit(state);
 
         Self { 
             consensus, 
@@ -116,7 +113,7 @@ impl<S: System> Component<S> {
                             let delta = instant.map(|instant| instant.elapsed());
 
                             S::handle(
-                                self.consensus.read_with(&self.process_emitter).node(), 
+                                self.node_with(&self.process_emitter), 
                                 message.clone(), 
                                 delta,
                             );

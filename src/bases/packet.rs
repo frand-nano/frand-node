@@ -123,6 +123,23 @@ impl Key {
     ) -> Self {
         Self(consist, transient)
     }
+
+    pub fn access(
+        mut self, 
+        id_delta: IdDelta,
+        alt_size: AltSize,
+    ) -> Self {
+        self.0 = self.0.access(id_delta, alt_size);
+        self
+    }
+
+    pub fn alt(
+        mut self, 
+        index: AltIndex,
+    ) -> Self {
+        self.1 = self.transient().alt(self.consist().alt_depth(), index);
+        self
+    }
 }
 
 impl Consist {

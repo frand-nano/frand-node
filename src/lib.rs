@@ -29,10 +29,10 @@ pub mod ext {
         bases::{
             packet::{IdDelta, IdSize, AltIndex, AltSize, Key, Consist, Id, AltDepth, Transient, Payload, Packet, MessagePacket},
             callback::Callback,
+            lookup::{Lookup, LookupBuilder},
             emitter::Emitter,
-            accesser::{Accesser, RcAccess},
-            consensus_read::ConsensusRead,
-            node::NewNode,
+            accesser::Accesser,
+            node::{NewNode, NodeAlt},
             result::{Result, PacketError},
         },
         terminal::terminal,

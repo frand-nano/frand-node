@@ -13,8 +13,8 @@ pub struct Sum {
 }
 
 impl System for Sum {
-    fn handle<CS: System>(
-        node: Self::Node<'_, CS>, 
+    fn handle(
+        node: Self::Node<'_>, 
         message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {        
@@ -23,7 +23,7 @@ impl System for Sum {
         match message {
             // a 또는 b 가 emit 되면 sum1.sum 에 sum1.a + sum1.b 를 emit          
             A(_) | B(_) => {
-                let sum = *node.a + *node.b;
+                let sum = node.a.v() + node.b.v();
                 node.sum.emit_future(async move {
                     // 적용 전 1초 비동기 대기
                     sleep(Duration::from_millis(1000)).await;
@@ -37,13 +37,13 @@ impl System for Sum {
     }
 }
 
-impl<CS: System> Widget for sum::Node<'_, CS> {
+impl Widget for sum::Node<'_> {
     fn ui(self, ui: &mut Ui) -> Response {       
         ui.horizontal(|ui| {
             ui.inc_button(self.a);
             ui.label(" + ");
             ui.inc_button(self.b);
-            ui.label(format!(" : {}", *self.sum));
+            ui.label(format!(" : {}", self.sum.v()));
         }).response   
     }
 }

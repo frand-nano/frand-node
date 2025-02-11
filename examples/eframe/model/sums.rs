@@ -13,8 +13,8 @@ pub struct Sums {
 }
 
 impl System for Sums {
-    fn handle<CS: System>(
-        node: Self::Node<'_, CS>, 
+    fn handle(
+        node: Self::Node<'_>, 
         message: Self::Message, 
         delta: Option<std::time::Duration>,
     ) {        
@@ -36,7 +36,7 @@ impl System for Sums {
             // sums 에 emit 되었을 때
             // sums 의 모든 값들을 Box에 모아 1초뒤에 그 합을 emit
             Sums(_) => {
-                let values: Box<_> = node.sums.items().map(|n| *n).collect();
+                let values: Box<_> = node.sums.items().map(|n| n.v()).collect();
                 node.total.emit_future(async move {
                     sleep(Duration::from_millis(1000)).await;
                     values.iter().sum()
@@ -51,7 +51,7 @@ impl System for Sums {
     }
 }
 
-impl<CS: System> Widget for sums::Node<'_, CS> {
+impl Widget for sums::Node<'_> {
     fn ui(self, ui: &mut Ui) -> Response {       
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
@@ -74,11 +74,11 @@ impl<CS: System> Widget for sums::Node<'_, CS> {
 
             ui.horizontal(|ui| {
                 for sum in self.sums.items() {   
-                    ui.label(format!("{} +", *sum.node()));
+                    ui.label(format!("{} +", sum.node().v()));
                 }
             });
 
-            ui.label(format!("Total: {}", *self.total));
+            ui.label(format!("Total: {}", self.total.v()));
         }).response
     }
 }

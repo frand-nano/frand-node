@@ -4,7 +4,7 @@ members = [ "macro" ]
 
 [workspace.package]
 edition = "2021"
-version = "0.2.0"
+version = "0.2.1"
 license = "MIT"
 authors = [ "frand-nano <frand.nano@gmail.com>" ]
 

@@ -8,7 +8,8 @@ pub trait IncOnClick<'n, S: System, N: Node<'n, S>>: Clickable + Sized
 where S: Display + Integer + Copy {
     fn inc_on_click(self, node: N) -> Self {     
         if self.clicked() {
-            let mut value = *node;
+            let mut value = node.v();
+            
             value.inc();
 
             node.emit(value);

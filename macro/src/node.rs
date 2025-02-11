@@ -112,8 +112,8 @@ pub fn expand(
     
             type Message = #state_snake_name::Message #ty_generics;
             type Emitter = #state_snake_name::Emitter #ty_generics;
-            type Accesser<CS: #ext::System> = #state_snake_name::Accesser<CS, #ty_params>;
-            type Node<'n, CS: #ext::System> = #state_snake_name::Node<'n, CS, #ty_params>;
+            type Accesser = #state_snake_name::Accesser #ty_generics;
+            type Node<'n> = #state_snake_name::Node<'n, #ty_params>;
 
             fn from_payload(payload: &#ext::Payload) -> Self {
                 #ext::Payload::to_state(payload)
@@ -124,7 +124,7 @@ pub fn expand(
             }       
                     
             fn into_message(self) -> Self::Message {
-                #state_snake_name::Message::State(self)
+                Self::Message::State(self)
             }  
         }
 
@@ -149,23 +149,22 @@ pub fn expand(
             }
 
             #[derive(Debug, Clone)]
-            pub struct Accesser<CS: #ext::System, #impl_params> {
-                access: #ext::RcAccess<#state_name #ty_generics, CS>,
-                #(#viss #names: #accesser_tys<CS>,)*
+            pub struct Accesser #impl_generics {
+                lookup: #ext::Lookup<#state_name #ty_generics>,
+                #(#viss #names: #accesser_tys,)*
             }
 
-            #[derive(Debug)]
-            pub struct Node<'n, CS: #ext::System, #impl_params> {
-                emitter: &'n Emitter #ty_generics,
-                accesser: &'n Accesser<CS, #ty_params>,
-                consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,                
+            #[derive(Debug, Clone)]
+            pub struct Node<'n, #impl_params> {
+                accesser: &'n Accesser #ty_generics,       
+                emitter: &'n Emitter #ty_generics,  
                 transient: &'n #ext::Transient,      
-                #(#viss #names: <#tys as #ext::State>::Node<'n, CS>,)*
+                #(#viss #names: <#tys as #ext::State>::Node<'n>,)*
             }
         
             impl #impl_generics #ext::Fallback for #state_name #ty_generics {
-                fn fallback<CS: #ext::System>(
-                    node: Node<'_, CS, #ty_params>, 
+                fn fallback(
+                    node: Node<'_, #ty_params>, 
                     message: Message #ty_generics, 
                     delta: Option<std::time::Duration>,
                 ) {
@@ -194,7 +193,11 @@ pub fn expand(
                             Message::#pascal_names(#message_tys::from_packet(
                                 packet, 
                                 #ext::Key::new(
-                                    parent_key.consist().access(#id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE),
+                                    parent_key.consist()
+                                    .access(
+                                        #id_delta_names, 
+                                        <#state_name #ty_generics>::NODE_ALT_SIZE,
+                                    ),
                                     parent_key.transient(),
                                 ), 
                                 depth + 1,
@@ -244,7 +247,7 @@ pub fn expand(
                             #names: #ext::Emitter::new(
                                 #ext::Callback::access(
                                     callback.clone(), 
-                                    #id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE,
+                                    #id_delta_names, 
                                     |_, message| Message::#pascal_names(message),
                                 ),
                             ),
@@ -254,71 +257,46 @@ pub fn expand(
                 }
             }
 
-            impl<CS: System, #impl_params> std::ops::Deref for Accesser<CS, #ty_params> {
-                type Target = #ext::RcAccess<#state_name #ty_generics, CS>;
-                fn deref(&self) -> &Self::Target { &self.access }
-            }
-        
-            impl<CS: System, #impl_params> #ext::Accesser<#state_name #ty_generics, CS> for Accesser<CS, #ty_params> {
-                fn new(
-                    access: #ext::RcAccess<#state_name #ty_generics, CS>,
+            impl #impl_generics #ext::Accesser<#state_name #ty_generics> for Accesser #ty_generics {
+                fn lookup(&self) -> &#ext::Lookup<#state_name #ty_generics> {
+                    &self.lookup
+                }
+
+                fn new<CS: #ext::System>(
+                    builder: #ext::LookupBuilder<CS, #state_name #ty_generics>,
                 ) -> Self {
                     Self { 
-                        #(#names: #ext::Accesser::new(
-                            #ext::RcAccess::access(
-                                access.clone(), 
-                                #id_delta_names, <#state_name #ty_generics>::NODE_ALT_SIZE,
-                                |state, _| &state.#names,
-                            ),
-                        ),)*
-                        access, 
+                        #(#names: #ext::Accesser::new(builder.access(
+                            |state, _| state.map(|state| &state.#names),
+                            #id_delta_names,
+                        )),)*
+                        lookup: builder.build(|state| state.cloned()), 
                     }
                 }
             }
 
-            impl<'n, CS: #ext::System, #impl_params> std::ops::Deref for Node<'n, CS, #ty_params> {
-                type Target = #state_name #ty_generics;
-                fn deref(&self) -> &Self::Target { 
-                    (self.accesser.access)(self.consensus, *self.transient)
-                }
-            }
-
-            impl<'n, CS: #ext::System, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, CS, #ty_params> {
-                fn transient(&self) -> &#ext::Transient { self.transient }
+            impl<'n, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, #ty_params> {
+                fn accesser(&self) -> &Accesser #ty_generics { self.accesser }
                 fn emitter(&self) -> &Emitter #ty_generics { self.emitter }
+                fn transient(&self) -> &#ext::Transient { self.transient }
             }
 
-            impl<'n, CS: #ext::System, #impl_params> #ext::NewNode<'n, #state_name #ty_generics, CS> for Node<'n, CS, #ty_params> {
+            impl<'n, #impl_params> #ext::NewNode<'n, #state_name #ty_generics> for Node<'n, #ty_params> {
                 fn new(
+                    accesser: &'n Accesser #ty_generics,
                     emitter: &'n Emitter #ty_generics,
-                    accesser: &'n Accesser<CS, #ty_params>,
-                    consensus: &'n std::sync::Arc<std::sync::RwLockReadGuard<'n, CS>>,
                     transient: &'n #ext::Transient,     
                 ) -> Self {
                     Self { 
-                        emitter, 
                         accesser,
+                        emitter, 
                         #(#names: #ext::NewNode::new(
-                            &emitter.#names, 
                             &accesser.#names, 
-                            consensus, 
+                            &emitter.#names, 
                             transient, 
                         ),)*
-                        consensus, 
                         transient,
                     }
-                }
-        
-                fn alt(
-                    &self,
-                    transient: #ext::Transient,         
-                ) -> #ext::ConsensusRead<'n, #state_name #ty_generics, CS> {
-                    #ext::ConsensusRead::new(
-                        self.emitter, 
-                        self.accesser, 
-                        self.consensus.clone(), 
-                        transient,
-                    )
                 }
             }
         }
