@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use eframe::egui::*;
 use frand_node::*;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Node)]
@@ -23,7 +22,10 @@ impl System for Stopwatch {
             // elapsed.emit_carry() 를 호출하여 다음 Tick 에 동작 예약
             Elapsed(elapsed) if node.enabled.v() => {
                 let delta = delta.unwrap_or_default().as_secs_f32();
-                node.elapsed.emit_carry(elapsed + delta);
+
+                node.elapsed.emit_carry(
+                    move || elapsed + delta
+                );
             },
 
             // enabled 에 true 가 emit 되었을 때
@@ -36,33 +38,11 @@ impl System for Stopwatch {
             // enabled 와 elapsed 를 emit 하여 초기화 및 정지
             Reset(_) => {
                 node.enabled.emit(false);
-                node.elapsed.emit_carry(0.0);
+                node.elapsed.emit_carry(|| 0.0);
             },
 
             // 그 외의 메시지를 fallback 하여 전달
             message => Self::fallback(node, message, delta),
         }       
-    }
-}
-
-impl Widget for stopwatch::Node<'_> {
-    fn ui(self, ui: &mut Ui) -> Response {      
-        ui.horizontal(|ui| {
-            ui.label(format!("elapsed : {:.1}", self.elapsed.v()));
-
-            let start_stop_text = if self.enabled.v() { 
-                "stop" 
-            } else { 
-                "start" 
-            };
-    
-            if ui.button(start_stop_text).clicked() {
-                self.enabled.emit(!self.enabled.v());
-            }
-    
-            if ui.button("reset").clicked() {
-                self.reset.emit(());
-            }
-        }).response  
     }
 }

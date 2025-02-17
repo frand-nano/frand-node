@@ -1,28 +1,6 @@
 use std::vec::IntoIter;
 use crate::ext::*;
 
-impl<I: System> State for Vec<I> {
-    const NODE_SIZE: IdSize = 1 + <AltIndex as State>::NODE_SIZE + <I as State>::NODE_SIZE;
-    const NODE_ALT_SIZE: AltSize = 1;
-
-    type Message = vec::Message<I>;
-    type Emitter = vec::Emitter<I>;
-    type Accesser = vec::Accesser<I>;
-    type Node<'n> = vec::Node<'n, I>;
-
-    fn from_payload(payload: &Payload) -> Self {
-        Payload::to_state(payload)
-    }
-
-    fn to_payload(&self) -> Payload {
-        Payload::from_state(self)
-    }
-
-    fn into_message(self) -> Self::Message {
-        vec::Message::State(self)
-    }
-}
-
 pub mod vec {
     use super::*;
 
@@ -45,7 +23,7 @@ pub mod vec {
 
     #[derive(Debug, Clone)]
     pub struct Emitter<I: System> {
-        callback: super::Callback<Message<I>>,
+        callback: super::Callback<Vec<I>>,
         pub push: super::Callback<I>,
         pub pop: super::Callback<()>,
         pub len: super::Callback<AltIndex>,
@@ -63,8 +41,31 @@ pub mod vec {
     pub struct Node<'n, I: System> {  
         accesser: &'n Accesser<I>,
         emitter: &'n Emitter<I>,
+        callback_mode: &'n CallbackMode,
         transient: &'n super::Transient,
         pub item: <I as super::State>::Node<'n>,
+    }
+
+    impl<I: System> super::State for Vec<I> {
+        const NODE_SIZE: super::IdSize = 1 + <super::AltIndex as super::State>::NODE_SIZE + <I as super::State>::NODE_SIZE;
+        const NODE_ALT_SIZE: super::AltSize = 1;
+    
+        type Message = vec::Message<I>;
+        type Emitter = vec::Emitter<I>;
+        type Accesser = vec::Accesser<I>;
+        type Node<'n> = vec::Node<'n, I>;
+    
+        fn from_payload(payload: &super::Payload) -> Self {
+            super::Payload::to_state(payload)
+        }
+    
+        fn to_payload(&self) -> super::Payload {
+            super::Payload::from_state(self)
+        }
+    
+        fn into_message(self) -> Self::Message {
+            vec::Message::State(self)
+        }
     }
 
     impl<I: System> super::Fallback for Vec<I> {
@@ -156,36 +157,52 @@ pub mod vec {
                 Self::Push(item) => state.push(item.clone()),
                 Self::Pop => { state.pop(); },
                 Self::Len(len) => state.resize(*len as usize, Default::default()),
-                Self::Item(index, item) => item.apply_to(&mut state[*index as usize]),
+                Self::Item(index, message) => {
+                    if let Some(item) = state.get_mut(*index as usize) {
+                        message.apply_to(item);
+                    }
+                },
                 Self::State(new_state) => *state = new_state.clone(),
             }
         }
     }
 
     impl<I: System> super::Emitter<Vec<I>> for Emitter<I> {
-        fn callback(&self) -> &super::Callback<Message<I>> {
+        fn callback(&self) -> &super::Callback<Vec<I>> {
             &self.callback
         }
 
-        fn new(callback: super::Callback<Message<I>>) -> Self {
+        fn new(callback: super::Callback<Vec<I>>) -> Self {
             Self {
                 push: super::Callback::<I>::access(
-                    callback.clone(),
+                    *callback.consist(),
+                    callback.callback().clone(),
+                    callback.process().clone(),
                     PUSH_ID_DELTA,
-                    |_, item| Message::Push(item),
+                    |_, message| {
+                        let mut item = I::default();
+                        super::Message::apply_to(&message, &mut item);
+                        Message::Push(item)
+                    },
                 ),
                 pop: super::Callback::access(
-                    callback.clone(),
+                    *callback.consist(),
+                    callback.callback().clone(),
+                    callback.process().clone(),
                     POP_ID_DELTA,
                     |_, _| Message::Pop,
                 ),
                 len: super::Callback::access(
-                    callback.clone(),
+                    *callback.consist(),
+                    callback.callback().clone(),
+                    callback.process().clone(),
                     LEN_ID_DELTA,
                     |_, message| Message::Len(message),
                 ),
                 item: super::Emitter::new(super::Callback::access(
-                    callback.clone(),
+                    *callback.consist(),
+                    callback.callback().clone(),
+                    callback.process().clone(),
                     ITEM_ID_DELTA,
                     |index, message| Message::Item(index, message),
                 )),
@@ -214,6 +231,7 @@ pub mod vec {
     impl<'n, I: System> super::Node<'n, Vec<I>> for Node<'n, I> {
         fn accesser(&self) -> &Accesser<I> { self.accesser }
         fn emitter(&self) -> &Emitter<I> { self.emitter }
+        fn callback_mode(&self) -> &CallbackMode { &self.callback_mode }
         fn transient(&self) -> &super::Transient { &self.transient }
     }
     
@@ -221,15 +239,18 @@ pub mod vec {
         fn new(
             accesser: &'n Accesser<I>,
             emitter: &'n Emitter<I>,
+            callback_mode: &'n CallbackMode,
             transient: &'n super::Transient,
         ) -> Self {
             Self {
                 accesser,
                 emitter,
+                callback_mode,
                 transient,
                 item: super::NewNode::new(
                     &accesser.item, 
                     &emitter.item, 
+                    callback_mode,
                     transient,
                 ),
             }
@@ -238,11 +259,11 @@ pub mod vec {
 
     impl<'n, I: System> Node<'n, I> {
         pub fn emit_push(&self, item: I) {
-            self.emitter.push.emit(self.transient, item);
+            self.emitter.push.emit(self.callback_mode, self.transient, item.into_message());
         }
 
         pub fn emit_pop(&self) {
-            self.emitter.pop.emit(self.transient, ());            
+            self.emitter.pop.emit(self.callback_mode, self.transient, ());            
         }
 
         pub fn items(&self) -> IntoIter<NodeAlt<'_, I>> {
@@ -256,7 +277,7 @@ pub mod vec {
         }     
 
         pub fn len(&self) -> usize {
-            (self.accesser.lookup_len)(self.transient).unwrap_or_default()
+            self.accesser.lookup_len.get(self.transient).unwrap_or_default()
         }
 
         pub fn item(&self, index: AltIndex) -> NodeAlt<'_, I> {

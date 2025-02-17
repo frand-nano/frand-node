@@ -33,81 +33,128 @@ pub struct Packet {
     payload: Payload,
 }
 
-pub enum MessagePacket<M: 'static> {
-    Message(Key, Option<Instant>, M),
-    Carry(Key, Instant, M),
-    Future(Key, Instant, Pin<Box<dyn Future<Output = M> + Send + Sync>>),
+#[derive(Debug)]
+pub enum MessagePacket<S: State> {
+    Message(MessagePacketMessage<S>),
+    Carry(MessagePacketCarry<S>),
+    Future(MessagePacketFuture<S>),
 }
 
-impl<M: 'static + std::fmt::Debug> std::fmt::Debug for MessagePacket<M> {
+#[derive(Debug, Clone)]
+pub struct MessagePacketMessage<S: State>{
+    pub key: Key,
+    pub instant: Option<Instant>,
+    pub message: S::Message,
+}
+
+pub struct MessagePacketCarry<S: State>{
+    pub key: Key,
+    pub instant: Instant,
+    pub lookup: Box<dyn Fn() -> S::Message + 'static + Send + Sync>,
+}
+
+pub struct MessagePacketFuture<S: State>{
+    pub key: Key,
+    pub instant: Instant,
+    future: Pin<Box<dyn Future<Output = S::Message> + Send + Sync>>,
+}
+
+impl<S: State + std::fmt::Debug> std::fmt::Debug for MessagePacketCarry<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Message(arg0, arg1, arg2) => {
-                f.debug_tuple("Message").field(arg0).field(arg1).field(arg2).finish()
-            },
-            Self::Carry(arg0, arg1, arg2) => {
-                f.debug_tuple("Carry").field(arg0).field(arg1).field(arg2).finish()
-            },
-            Self::Future(arg0, arg1, arg2) => {
-                f.debug_tuple("Future").field(arg0).field(arg1).field(&type_name_of_val(arg2)).finish()
-            },
-        }
+        f.debug_struct("MessagePacketCarry")
+        .field("key", &self.key)
+        .field("instant", &self.instant)
+        .field("lookup", &type_name_of_val(&self.lookup))
+        .finish()
     }
 }
 
-impl<M: 'static + Clone + Unpin> Future for MessagePacket<M> {
-    type Output = Self;
+impl<S: State + std::fmt::Debug> std::fmt::Debug for MessagePacketFuture<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MessagePacketFuture")
+        .field("key", &self.key)
+        .field("instant", &self.instant)
+        .field("future", &type_name_of_val(&self.future))
+        .finish()
+    }
+}
+
+impl<S: State> Future for MessagePacketFuture<S> {
+    type Output = MessagePacketMessage<S>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.get_mut() {
-            MessagePacket::Message(key, instant, message) => Poll::Ready(
-                Self::Message(*key, *instant, message.clone())
-            ),
-            MessagePacket::Carry(key, instant, message) => Poll::Ready(
-                Self::Message(*key, Some(*instant), message.clone())
-            ),
-            MessagePacket::Future(key, instant, future) => {
-                future.as_mut().poll(cx)
-                .map(|message| Self::Message(*key, Some(*instant), message.clone()))
-            },
-        }
+        let key = self.key;
+        let instant = Some(self.instant);
+
+        self.get_mut().future.as_mut().poll(cx)
+        .map(|message| MessagePacketMessage {
+            key,
+            instant, 
+            message,
+        })
     }
 }
 
-impl<M: 'static> MessagePacket<M> {
-    pub fn new_future<F>(key: Key, future: F) -> Self 
-    where F: Future<Output = M> + 'static + Send + Sync {
-        Self::Future(key, Instant::now(), Box::pin(future))
+impl<S: State> MessagePacket<S> {
+    pub fn message(key: Key, message: S::Message) -> Self {
+        Self::Message(MessagePacketMessage { 
+            key, 
+            instant: None, 
+            message, 
+        })
     }
 
-    pub fn wrap<P: 'static>(
+    pub fn carry<F>(key: Key, lookup: F) -> Self 
+    where F: Fn() -> S::Message + 'static + Send + Sync {
+        Self::Carry(MessagePacketCarry { 
+            key, 
+            instant: Instant::now(), 
+            lookup: Box::new(lookup), 
+        })
+    }
+
+    pub fn future<F>(key: Key, future: F) -> Self 
+    where F: Future<Output = S::Message> + 'static + Send + Sync {
+        Self::Future(MessagePacketFuture { 
+            key, 
+            instant: Instant::now(), 
+            future: Box::pin(future), 
+        })
+    }
+
+    pub fn wrap<P: State>(
         self,
         alt_depth: AltDepth,
-        wrap: fn(AltIndex, M) -> P,
+        wrap: fn(AltIndex, S::Message) -> P::Message,
     ) -> MessagePacket<P> {        
         match self {
-            Self::Message(key, instant, message) => {
-                MessagePacket::Message(
-                    key, 
-                    instant, 
-                    wrap(key.transient().index(alt_depth), message),
-                )
+            Self::Message(message) => {
+                let index = message.key.transient().index(alt_depth);
+
+                MessagePacket::Message(MessagePacketMessage { 
+                    key: message.key, 
+                    instant: message.instant, 
+                    message: wrap(index, message.message),
+                })
             },
-            Self::Carry(key, instant, message) => {
-                MessagePacket::Carry(
-                    key, 
-                    instant, 
-                    wrap(key.transient().index(alt_depth), message),
-                )
+            Self::Carry(message) => {
+                let index = message.key.transient().index(alt_depth);
+
+                MessagePacket::Carry(MessagePacketCarry { 
+                    key: message.key, 
+                    instant: message.instant, 
+                    lookup: Box::new(move || wrap(index, (message.lookup)())),
+                })
             },
-            Self::Future(key, instant, future) => {
-                let index = key.transient().index(alt_depth);
-                MessagePacket::Future(
-                    key, 
-                    instant, 
-                    Box::pin(async move { 
-                        wrap(index, future.await) 
+            Self::Future(message) => {
+                let index = message.key.transient().index(alt_depth);
+
+                MessagePacket::Future(MessagePacketFuture { 
+                    key: message.key, 
+                    instant: message.instant, 
+                    future: Box::pin(async move { 
+                        wrap(index, message.future.await) 
                     })
-                )
+                })
             },
         }
     }

@@ -1,4 +1,4 @@
-use frand_node::prelude::*;
+use frand_node::ext::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Node)]

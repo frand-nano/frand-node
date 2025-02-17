@@ -1,7 +1,6 @@
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use frand_node::{prelude::*, vec::vec};
-use eframe::egui::*;
 use tokio::time::sleep;
 use super::sum::{sum, Sum};
 
@@ -48,37 +47,5 @@ impl System for Sums {
             // Sum Node 는 a, b, sum 을 가지며 a 또는 b 에 emit 되면 sum 에 그 합을 emit
             message => Self::fallback(node, message, delta),
         }             
-    }
-}
-
-impl Widget for sums::Node<'_> {
-    fn ui(self, ui: &mut Ui) -> Response {       
-        ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                let len = self.values.len();
-    
-                if ui.button(format!(" - ")).clicked() {
-                    self.values.emit_pop();
-                }
-    
-                ui.label(format!(" len: {len} "));
-    
-                if ui.button(format!(" + ")).clicked() {
-                    self.values.emit_push(Default::default());
-                }
-            });
-
-            for value in self.values.items() {   
-                value.node().ui(ui);
-            }
-
-            ui.horizontal(|ui| {
-                for sum in self.sums.items() {   
-                    ui.label(format!("{} +", sum.node().v()));
-                }
-            });
-
-            ui.label(format!("Total: {}", self.total.v()));
-        }).response
     }
 }

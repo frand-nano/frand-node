@@ -1,8 +1,8 @@
 use std::fmt::Debug;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Deserialize, Serialize};
 use crate::ext::*;
 
-pub trait State: 'static + Debug + Default + Clone + Send + Sync + Unpin + Serialize + DeserializeOwned {
+pub trait State: 'static + Debug + Default + Clone + Send + Sync + Unpin + Serialize + for<'de> Deserialize<'de> {
     const NODE_SIZE: IdSize;
     const NODE_ALT_SIZE: AltSize;
 

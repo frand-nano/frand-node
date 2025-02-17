@@ -11,9 +11,12 @@ pub struct Consensus<CS: System> {
 
 impl<CS: System> Consensus<CS> {
     pub fn new(
-        callback: impl Fn(MessagePacket<CS::Message>) + 'static + Send + Sync,
+        state: CS,
+        callback: impl Fn(MessagePacket<CS>) + 'static + Send + Sync,
+        process: impl Fn(MessagePacket<CS>) + 'static + Send + Sync,
     ) -> Self {
         let consensus: Arc<RwLock<CS>> = Arc::default();
+        *consensus.write().unwrap() = state;
 
         Self { 
             accesser: Accesser::new(
@@ -27,6 +30,7 @@ impl<CS: System> Consensus<CS> {
                 Callback::new(
                     Consist::default(), 
                     Arc::new(callback),
+                    Arc::new(process),
                 ),
             ), 
             transient: Transient::default(),
@@ -38,17 +42,16 @@ impl<CS: System> Consensus<CS> {
         NewNode::new(
             &self.accesser,
             &self.emitter,
+            &CallbackMode::Default,
             &self.transient,
         )
     }
 
-    pub fn node_with<'c: 'n, 'n>(
-        &'c self, 
-        emitter: &'c CS::Emitter,
-    ) -> CS::Node<'n> {
+    pub fn process_node<'c: 'n, 'n>(&'c self) -> CS::Node<'n> {
         NewNode::new(
             &self.accesser,
-            emitter,
+            &self.emitter,
+            &CallbackMode::Process,
             &self.transient,
         )
     }

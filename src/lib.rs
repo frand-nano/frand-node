@@ -7,8 +7,10 @@
 pub use prelude::*;
 
 pub mod bases;
+
 pub mod terminal;
 pub mod vec;
+pub mod proxy;
 
 pub mod prelude {
     pub use frand_node_macro::*;
@@ -28,7 +30,7 @@ pub mod ext {
         prelude::*,
         bases::{
             packet::{IdDelta, IdSize, AltIndex, AltSize, Key, Consist, Id, AltDepth, Transient, Payload, Packet, MessagePacket},
-            callback::Callback,
+            callback::{Callback, CallbackMode},
             lookup::{Lookup, LookupBuilder},
             emitter::Emitter,
             accesser::Accesser,
@@ -37,6 +39,7 @@ pub mod ext {
         },
         terminal::terminal,
         vec::vec,
+        proxy::{proxy, Proxy},
     };
 }
 

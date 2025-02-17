@@ -1,4 +1,4 @@
-use std::{any::type_name_of_val, ops::Deref, sync::{Arc, RwLock}};
+use std::{any::type_name_of_val, sync::{Arc, RwLock}};
 use crate::ext::*;
 
 #[derive(Clone)]
@@ -21,9 +21,10 @@ impl<T: 'static + std::fmt::Debug> std::fmt::Debug for Lookup<T> {
     }
 }
 
-impl<T: 'static> Deref for Lookup<T> {
-    type Target = Arc<dyn Fn(&Transient) -> Option<T> + Send + Sync>;
-    fn deref(&self) -> &Self::Target { &self.lookup }
+impl<T: 'static> Lookup<T> {
+    pub fn get(&self, transient: &Transient) -> Option<T> { 
+        (self.lookup)(transient) 
+    }
 }
 
 impl<CS: System, P: State> LookupBuilder<CS, P> {

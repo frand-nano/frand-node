@@ -2,8 +2,6 @@ use tokio::time::sleep;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use frand_node::prelude::*;
-use eframe::egui::*;
-use crate::widget::clickable::IncButton;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Node)]
 pub struct Sum {
@@ -34,16 +32,5 @@ impl System for Sum {
             // 그 외의 메시지를 fallback 하여 전달
             message => Self::fallback(node, message, delta),
         }          
-    }
-}
-
-impl Widget for sum::Node<'_> {
-    fn ui(self, ui: &mut Ui) -> Response {       
-        ui.horizontal(|ui| {
-            ui.inc_button(self.a);
-            ui.label(" + ");
-            ui.inc_button(self.b);
-            ui.label(format!(" : {}", self.sum.v()));
-        }).response   
     }
 }

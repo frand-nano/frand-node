@@ -18,6 +18,7 @@ pub mod terminal {
     pub struct Node<'n, S: System> {
         accesser: &'n S::Accesser,
         emitter: &'n S::Emitter,
+        callback_mode: &'n CallbackMode,
         transient: &'n Transient,      
     }
     
@@ -49,6 +50,7 @@ pub mod terminal {
     impl<'n, S: System> super::Node<'n, S> for Node<'n, S> {
         fn accesser(&self) -> &S::Accesser { self.accesser }
         fn emitter(&self) -> &S::Emitter { self.emitter }
+        fn callback_mode(&self) -> &CallbackMode { self.callback_mode }
         fn transient(&self) -> &Transient { &self.transient }
     }
     
@@ -56,11 +58,13 @@ pub mod terminal {
         fn new(
             accesser: &'n S::Accesser,
             emitter: &'n S::Emitter,
+            callback_mode: &'n CallbackMode,
             transient: &'n Transient,        
         ) -> Self {
             Self { 
                 accesser,
                 emitter,
+                callback_mode,
                 transient,
             }
         }

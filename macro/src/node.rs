@@ -5,9 +5,13 @@ use convert_case::{Case, Casing};
 
 pub fn expand(
     state: ItemStruct,
+    ext: TokenStream,
 ) -> Result<TokenStream> {    
-    let ext = quote!{ frand_node::ext };
-    let vis = &state.vis;
+    let vis = match &state.vis {
+        Visibility::Inherited => quote!{ pub(super) },
+        vis => vis.to_token_stream(),
+    };
+
     let state_name = state.ident.clone();
 
     let state_snake_name = Ident::new(
@@ -48,7 +52,13 @@ pub fn expand(
         _ => unimplemented!("not supported"),
     };  
 
-    let viss: Vec<_> = fields.iter().map(|field| &field.vis).collect();
+    let viss: Vec<_> = fields.iter().map(|field| {
+        match &field.vis {
+            Visibility::Inherited => quote!{ pub(super) },
+            vis => vis.to_token_stream(),
+        }
+    }).collect();
+
     let names: Vec<_> = fields.iter().filter_map(|field| field.ident.as_ref()).collect();
     let tys: Vec<_> = fields.iter().map(|field| &field.ty).collect();
 
@@ -106,28 +116,6 @@ pub fn expand(
     ).collect();
     
     Ok(quote!{       
-        impl #impl_generics #ext::State for #state_name #ty_generics {
-            const NODE_SIZE: #ext::IdSize = 1 #(+ #node_sizes)*;
-            const NODE_ALT_SIZE: #ext::AltSize = 0;
-    
-            type Message = #state_snake_name::Message #ty_generics;
-            type Emitter = #state_snake_name::Emitter #ty_generics;
-            type Accesser = #state_snake_name::Accesser #ty_generics;
-            type Node<'n> = #state_snake_name::Node<'n, #ty_params>;
-
-            fn from_payload(payload: &#ext::Payload) -> Self {
-                #ext::Payload::to_state(payload)
-            }
-
-            fn to_payload(&self) -> #ext::Payload {
-                #ext::Payload::from_state(self)
-            }       
-                    
-            fn into_message(self) -> Self::Message {
-                Self::Message::State(self)
-            }  
-        }
-
         #vis mod #state_snake_name {
             use super::*;
 
@@ -138,13 +126,13 @@ pub fn expand(
             
             #[derive(Debug, Clone)]
             pub enum Message #impl_generics {
-                #(#pascal_names(#[allow(dead_code)] #message_tys),)*
-                State(#[allow(dead_code)] #state_name #ty_generics),
+                #(#pascal_names(#message_tys),)*
+                State(#state_name #ty_generics),
             }
 
             #[derive(Debug, Clone)]
             pub struct Emitter #impl_generics {
-                callback: #ext::Callback<Message #ty_generics>,
+                callback: #ext::Callback<#state_name #ty_generics>,
                 #(#viss #names: <#tys as #ext::State>::Emitter,)*
             }
 
@@ -158,8 +146,31 @@ pub fn expand(
             pub struct Node<'n, #impl_params> {
                 accesser: &'n Accesser #ty_generics,       
                 emitter: &'n Emitter #ty_generics,  
+                callback_mode: &'n #ext::CallbackMode,      
                 transient: &'n #ext::Transient,      
                 #(#viss #names: <#tys as #ext::State>::Node<'n>,)*
+            }
+
+            impl #impl_generics #ext::State for #state_name #ty_generics {
+                const NODE_SIZE: #ext::IdSize = 1 #(+ #node_sizes)*;
+                const NODE_ALT_SIZE: #ext::AltSize = 0;
+        
+                type Message = #state_snake_name::Message #ty_generics;
+                type Emitter = #state_snake_name::Emitter #ty_generics;
+                type Accesser = #state_snake_name::Accesser #ty_generics;
+                type Node<'n> = #state_snake_name::Node<'n, #ty_params>;
+    
+                fn from_payload(payload: &#ext::Payload) -> Self {
+                    #ext::Payload::to_state(payload)
+                }
+    
+                fn to_payload(&self) -> #ext::Payload {
+                    #ext::Payload::from_state(self)
+                }       
+                        
+                fn into_message(self) -> Self::Message {
+                    Self::Message::State(self)
+                }  
             }
         
             impl #impl_generics #ext::Fallback for #state_name #ty_generics {
@@ -237,16 +248,18 @@ pub fn expand(
             } 
 
             impl #impl_generics #ext::Emitter<#state_name #ty_generics> for Emitter #ty_generics {  
-                fn callback(&self) -> &#ext::Callback<Message #ty_generics> { &self.callback }
+                fn callback(&self) -> &#ext::Callback<#state_name #ty_generics> { &self.callback }
 
                 fn new(
-                    callback: #ext::Callback<Message #ty_generics>,
+                    callback: #ext::Callback<#state_name #ty_generics>,
                 ) -> Self {
                     Self { 
                         #(
                             #names: #ext::Emitter::new(
                                 #ext::Callback::access(
-                                    callback.clone(), 
+                                    *callback.consist(),
+                                    callback.callback().clone(),
+                                    callback.process().clone(),
                                     #id_delta_names, 
                                     |_, message| Message::#pascal_names(message),
                                 ),
@@ -275,9 +288,11 @@ pub fn expand(
                 }
             }
 
-            impl<'n, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, #ty_params> {
+            impl<'n, #impl_params> #ext::Node<'n, #state_name #ty_generics> for Node<'n, #ty_params> 
+            where #state_name #ty_generics: #ext::System {
                 fn accesser(&self) -> &Accesser #ty_generics { self.accesser }
                 fn emitter(&self) -> &Emitter #ty_generics { self.emitter }
+                fn callback_mode(&self) -> &#ext::CallbackMode { self.callback_mode }
                 fn transient(&self) -> &#ext::Transient { self.transient }
             }
 
@@ -285,6 +300,7 @@ pub fn expand(
                 fn new(
                     accesser: &'n Accesser #ty_generics,
                     emitter: &'n Emitter #ty_generics,
+                    callback_mode: &'n #ext::CallbackMode,
                     transient: &'n #ext::Transient,     
                 ) -> Self {
                     Self { 
@@ -293,8 +309,10 @@ pub fn expand(
                         #(#names: #ext::NewNode::new(
                             &accesser.#names, 
                             &emitter.#names, 
+                            callback_mode,
                             transient, 
                         ),)*
+                        callback_mode,
                         transient,
                     }
                 }
